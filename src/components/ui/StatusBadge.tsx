@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type StatusType = "draft" | "generated" | "processing";
+export type StatusType = "draft" | "generated" | "processing";
 
 interface StatusBadgeProps {
   status: StatusType;

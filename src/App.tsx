@@ -8,6 +8,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 // TP Docs Module
 import TPDocsListing from "@/pages/TPDocsListing";
 import CreateTPDoc from "@/pages/CreateTPDoc";
+import TPDocReview from "@/pages/TPDocReview";
+import Templates from "@/pages/Templates";
 
 // Companies Module
 import CompanyListing from "@/pages/CompanyListing";
@@ -18,6 +20,9 @@ import ScreeningResults from "@/pages/ScreeningResults";
 
 // Audit Trail Module
 import AuditTrail from "@/pages/AuditTrail";
+
+// Dashboard
+import Dashboard from "@/pages/Dashboard";
 
 import NotFound from "@/pages/NotFound";
 
@@ -32,11 +37,16 @@ const App = () => (
         <Routes>
           <Route element={<AppLayout />}>
             {/* Default redirect */}
-            <Route path="/" element={<Navigate to="/tp-docs" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            
+            {/* Dashboard */}
+            <Route path="/dashboard" element={<Dashboard />} />
             
             {/* TP Docs Module */}
             <Route path="/tp-docs" element={<TPDocsListing />} />
             <Route path="/tp-docs/create" element={<CreateTPDoc />} />
+            <Route path="/tp-docs/review" element={<TPDocReview />} />
+            <Route path="/templates" element={<Templates />} />
             
             {/* Companies Module */}
             <Route path="/companies" element={<CompanyListing />} />

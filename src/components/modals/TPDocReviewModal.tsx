@@ -42,9 +42,6 @@ export function TPDocReviewModal({ isOpen, onClose, document }: TPDocReviewModal
         <DialogHeader className="px-6 py-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle>Review TP Document - {document.companyName}</DialogTitle>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
           </div>
         </DialogHeader>
 

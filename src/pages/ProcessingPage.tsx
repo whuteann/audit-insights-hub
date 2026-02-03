@@ -21,7 +21,6 @@ export default function ProcessingPage() {
           <div className="text-center">
             <div className="relative inline-block">
               <FileSpreadsheet className="w-16 h-16 text-muted-foreground" />
-              <Loader2 className="w-8 h-8 text-accent absolute -bottom-1 -right-1 animate-spin" />
             </div>
             
             <h2 className="text-xl font-semibold mt-6 text-foreground">

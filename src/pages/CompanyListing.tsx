@@ -1,15 +1,42 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/ui/DataTable";
 import { ScreeningPromptModal } from "@/components/modals/ScreeningPromptModal";
-import { mockCompanies, Company } from "@/data/mockData";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { mockCompanies, mockProcessedCompanies, mockAuditEntries, Company } from "@/data/mockData";
 
 export default function CompanyListing() {
   const navigate = useNavigate();
   const [isScreeningModalOpen, setIsScreeningModalOpen] = useState(false);
+
+  const stats = useMemo(() => {
+    // Calculate companies screened this week
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const screenedThisWeek = mockAuditEntries.filter((entry) => {
+      if (entry.action !== "Ran Company Screening") return false;
+      const entryDate = new Date(entry.timestamp);
+      return entryDate >= startOfWeek;
+    }).length;
+
+    // Total companies processed
+    const totalProcessed = mockProcessedCompanies.length;
+
+    // Total companies in database
+    const totalInDatabase = mockCompanies.length;
+
+    return {
+      screenedThisWeek,
+      totalProcessed,
+      totalInDatabase,
+    };
+  }, []);
 
   const columns = [
     {
@@ -59,6 +86,32 @@ export default function CompanyListing() {
         }
       />
 
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 mb-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-medium">Screened This Week</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{stats.screenedThisWeek}</div>
+            <p className="text-sm text-muted-foreground mt-1">
+              Companies screened this week
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-medium">In Database</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{stats.totalInDatabase}</div>
+            <p className="text-sm text-muted-foreground mt-1">
+              Total companies in database
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <DataTable
         columns={columns}
         data={mockCompanies}
@@ -73,6 +126,7 @@ export default function CompanyListing() {
           setIsScreeningModalOpen(false);
           navigate("/companies/screening-results");
         }}
+        allowExtractedListOnly={false}
       />
     </div>
   );

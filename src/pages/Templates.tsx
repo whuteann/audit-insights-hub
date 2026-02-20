@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 type TemplateItem = {
   id: string;
@@ -23,14 +15,10 @@ type TemplateItem = {
 };
 
 export default function Templates() {
+  const navigate = useNavigate();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selected, setSelected] = useState<TemplateItem | null>(null);
-  const [draftName, setDraftName] = useState("");
-  const [draftJson, setDraftJson] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   const loadTemplates = () => {
     setIsLoading(true);
@@ -48,56 +36,6 @@ export default function Templates() {
   useEffect(() => {
     loadTemplates();
   }, [apiBase]);
-
-  const openEditor = (tpl: TemplateItem) => {
-    setSelected(tpl);
-    setDraftName(tpl.name);
-    setDraftJson(JSON.stringify(tpl.content ?? [], null, 2));
-    setError(null);
-  };
-
-  const closeEditor = () => {
-    setSelected(null);
-    setDraftName("");
-    setDraftJson("");
-    setError(null);
-  };
-
-  const saveTemplate = async () => {
-    if (!selected) return;
-    setError(null);
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(draftJson);
-      if (!Array.isArray(parsed)) {
-        setError("Content must be a JSON array of blocks.");
-        return;
-      }
-    } catch (e) {
-      setError("Invalid JSON.");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${apiBase}/templates/${selected.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: draftName.trim() || selected.name, content: parsed }),
-      });
-      if (!res.ok) throw new Error("Failed to save template");
-      const updated = await res.json();
-      setTemplates((prev) =>
-        prev.map((t) => (t.id === selected.id ? { ...t, ...updated } : t))
-      );
-      closeEditor();
-    } catch (err) {
-      console.error(err);
-      setError("Failed to save template.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
@@ -141,7 +79,11 @@ export default function Templates() {
                   {tpl.updated_at ? new Date(tpl.updated_at).toLocaleDateString() : "—"}
                 </div>
                 <div className="text-right">
-                  <Button size="sm" variant="outline" onClick={() => openEditor(tpl)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/templates/edit/${tpl.id}`)}
+                  >
                     Edit
                   </Button>
                 </div>
@@ -150,37 +92,6 @@ export default function Templates() {
           </div>
         )}
       </div>
-
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => (!open ? closeEditor() : null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit Template</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Template name</Label>
-              <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
-            </div>
-            <div className="grid gap-2 flex-1">
-              <Label>Content (JSON array)</Label>
-              <Textarea
-                value={draftJson}
-                onChange={(e) => setDraftJson(e.target.value)}
-                className="font-mono text-xs min-h-[45vh]"
-              />
-            </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={closeEditor}>
-                Cancel
-              </Button>
-              <Button onClick={saveTemplate} disabled={isSaving}>
-                Save
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

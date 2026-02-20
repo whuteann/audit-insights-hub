@@ -10,6 +10,7 @@ import TPDocsListing from "@/pages/TPDocsListing";
 import CreateTPDoc from "@/pages/CreateTPDoc";
 import TPDocReview from "@/pages/TPDocReview";
 import Templates from "@/pages/Templates";
+import TemplatesEdit from "@/pages/TemplatesEdit";
 
 // Companies Module
 import CompanyListing from "@/pages/CompanyListing";
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/tp-docs/create" element={<CreateTPDoc />} />
             <Route path="/tp-docs/review" element={<TPDocReview />} />
             <Route path="/templates" element={<Templates />} />
+            <Route path="/templates/edit/:id" element={<TemplatesEdit />} />
             
             {/* Companies Module */}
             <Route path="/companies" element={<CompanyListing />} />

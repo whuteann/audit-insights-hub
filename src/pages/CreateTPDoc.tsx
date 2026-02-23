@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/use-toast";
+import { deriveTransferPricingMethod } from "@/lib/transferPricingMethod";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { WizardStepper, type StageStatus } from "@/components/wizard/WizardStepper";
 import {
@@ -1254,30 +1255,7 @@ function DynamicTable({
 // -----------------------------
 
 function deriveMethodology(state: FormState) {
-  const testedParty = state.companyName || "(Company)";
-
-  const hasSales = state.rptTypesSelected.includes("Related Party Sales");
-  const hasPurchases = state.rptTypesSelected.includes("Related Party Purchase");
-  const hasServices = state.rptTypesSelected.includes("Intercompany Services") || state.intercompanyServices.length > 0;
-
-  // Risk profile proxy: count high risks
-  const highRisks = state.risksTable.filter((r) => (r.assumptionLevel ?? "").toString().toLowerCase() === "high").length;
-  const isRoutine = highRisks === 0;
-
-  // Heuristic method pick
-  let method = "TNMM";
-  if (hasSales && !hasPurchases && isRoutine) method = "RPM";
-  else if (hasPurchases && !hasSales && isRoutine) method = "CPM";
-  else if (hasServices && isRoutine) method = "TNMM";
-  else if (!isRoutine) method = "PSM";
-
-  // PLI heuristic
-  let pli = "Operating Margin (ROS)";
-  if (method === "CPM") pli = "Cost Plus Mark-up";
-  if (method === "RPM") pli = "Gross Margin";
-  if (method === "PSM") pli = "Residual/Contribution Split";
-
-  return { testedParty, method, pli };
+  return deriveTransferPricingMethod(state as unknown as Record<string, any>);
 }
 
 function hasValue(val: any) {
@@ -1465,10 +1443,8 @@ export default function CreateTPDoc() {
     applyDocumentToState(documentCache);
   }, [documentCache, draftId, draftLoaded, applyDocumentToState]);
 
-  const completionState = useMemo(() => {
-    if (documentCache) return buildStateFromDocument(documentCache);
-    return state;
-  }, [buildStateFromDocument, documentCache, state]);
+  // Validation/progress must follow the live form state, not last saved snapshot.
+  const completionState = state;
 
   const stageCompletion = useMemo(() => {
     const result: Record<
@@ -1649,8 +1625,15 @@ export default function CreateTPDoc() {
     if (!stageCompletion[stage.id]?.requiredComplete) return;
     await saveDraft(stage);
     if (stageIndex >= visibleStages.length - 1) {
-      // eslint-disable-next-line no-alert
-      alert("All stages completed (stub). Trigger draft generation here.");
+      if (!draftId) {
+        toast({
+          title: "Missing draft id",
+          description: "Unable to open review without a draft id.",
+          variant: "destructive",
+        });
+        return;
+      }
+      navigate(`/tp-docs/review-method?id=${encodeURIComponent(draftId)}`);
       return;
     }
     setCurrentStageId(visibleStages[stageIndex + 1]?.id ?? stage.id);

@@ -53,9 +53,14 @@ export default function Templates() {
             Manage section templates used in document assembly.
           </p>
         </div>
-        <Button variant="outline" onClick={loadTemplates} disabled={isLoading}>
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate("/templates/industry-analysis")}>
+            Industry Analysis
+          </Button>
+          <Button variant="outline" onClick={loadTemplates} disabled={isLoading}>
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card">

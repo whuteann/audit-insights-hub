@@ -9,8 +9,12 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import TPDocsListing from "@/pages/TPDocsListing";
 import CreateTPDoc from "@/pages/CreateTPDoc";
 import TPDocReview from "@/pages/TPDocReview";
+import TPDocMethodReview from "@/pages/TPDocMethodReview";
 import Templates from "@/pages/Templates";
 import TemplatesEdit from "@/pages/TemplatesEdit";
+import TemplatesIndustryAnalysis from "@/pages/TemplatesIndustryAnalysis";
+import AssemblyStructure from "@/pages/AssemblyStructure";
+import AssemblySectionEdit from "@/pages/AssemblySectionEdit";
 
 // Companies Module
 import CompanyListing from "@/pages/CompanyListing";
@@ -46,9 +50,13 @@ const App = () => (
             {/* TP Docs Module */}
             <Route path="/tp-docs" element={<TPDocsListing />} />
             <Route path="/tp-docs/create" element={<CreateTPDoc />} />
+            <Route path="/tp-docs/review-method" element={<TPDocMethodReview />} />
             <Route path="/tp-docs/review" element={<TPDocReview />} />
             <Route path="/templates" element={<Templates />} />
             <Route path="/templates/edit/:id" element={<TemplatesEdit />} />
+            <Route path="/templates/industry-analysis" element={<TemplatesIndustryAnalysis />} />
+            <Route path="/assembly" element={<AssemblyStructure />} />
+            <Route path="/assembly/sections/:id" element={<AssemblySectionEdit />} />
             
             {/* Companies Module */}
             <Route path="/companies" element={<CompanyListing />} />

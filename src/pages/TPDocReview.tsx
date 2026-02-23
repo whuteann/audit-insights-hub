@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/use-toast";
 import {
   Select,
   SelectContent,
@@ -73,6 +74,7 @@ export default function TPDocReview() {
   const [searchParams, setSearchParams] = useSearchParams();
   const docId = searchParams.get("id");
   const sectionParam = searchParams.get("section");
+  const versionParam = searchParams.get("version");
 
   const [document, setDocument] = useState<DocumentHeader | null>(null);
   const [documentData, setDocumentData] = useState<Record<string, any> | null>(null);
@@ -82,6 +84,8 @@ export default function TPDocReview() {
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSection, setSelectedSection] = useState<string>(sectionParam ?? "1");
+  const [availableVersions, setAvailableVersions] = useState<number[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<string>(versionParam ?? "");
   const [dataSearch, setDataSearch] = useState("");
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
@@ -209,8 +213,33 @@ export default function TPDocReview() {
   // Load draft sections for selected section
   useEffect(() => {
     if (!docId) return;
+    fetch(`${apiBase}/draft-documents/versions?document_id=${encodeURIComponent(docId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        const versions = Array.isArray(data?.versions) ? data.versions.map(Number).filter(Number.isFinite) : [];
+        setAvailableVersions(versions);
+        if (versions.length === 0) return;
+        const normalized = versionParam && versions.includes(Number(versionParam))
+          ? String(Number(versionParam))
+          : String(data.latest_version ?? versions[0]);
+        setSelectedVersion(normalized);
+        const nextParams = new URLSearchParams();
+        nextParams.set("id", docId);
+        nextParams.set("section", sectionParam ?? "1");
+        nextParams.set("version", normalized);
+        setSearchParams(nextParams, { replace: true });
+      })
+      .catch((err) => {
+        console.error("Failed to load draft versions", err);
+      });
+  }, [apiBase, docId, sectionParam, setSearchParams, versionParam]);
+
+  useEffect(() => {
+    if (!docId || !selectedVersion) return;
     setIsLoadingSections(true);
-    fetch(`${apiBase}/draft-documents/sections?document_id=${encodeURIComponent(docId)}&section=${selectedSection}`)
+    fetch(
+      `${apiBase}/draft-documents/sections?document_id=${encodeURIComponent(docId)}&section=${selectedSection}&version=${encodeURIComponent(selectedVersion)}`
+    )
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
         setDraftSections(Array.isArray(data) ? data : []);
@@ -219,13 +248,19 @@ export default function TPDocReview() {
         console.error("Failed to load draft sections", err);
       })
       .finally(() => setIsLoadingSections(false));
-  }, [apiBase, docId, selectedSection]);
+  }, [apiBase, docId, selectedSection, selectedVersion]);
 
   useEffect(() => {
     if (sectionParam && sectionParam !== selectedSection) {
       setSelectedSection(sectionParam);
     }
   }, [sectionParam, selectedSection]);
+
+  useEffect(() => {
+    if (versionParam && versionParam !== selectedVersion) {
+      setSelectedVersion(versionParam);
+    }
+  }, [versionParam, selectedVersion]);
 
   useEffect(() => {
     if (!editor) return;
@@ -293,7 +328,59 @@ export default function TPDocReview() {
   const handleSectionChange = (section: string) => {
     setSelectedSection(section);
     if (!docId) return;
-    setSearchParams({ id: docId, section });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("id", docId);
+    nextParams.set("section", section);
+    if (selectedVersion) nextParams.set("version", selectedVersion);
+    setSearchParams(nextParams);
+  };
+
+  const handleVersionChange = (version: string) => {
+    setSelectedVersion(version);
+    if (!docId) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("id", docId);
+    nextParams.set("section", selectedSection);
+    nextParams.set("version", version);
+    setSearchParams(nextParams);
+  };
+
+  const handleReassemble = async () => {
+    if (!docId) return;
+    try {
+      const res = await fetch(
+        `${apiBase}/draft-documents/assemble?document_id=${encodeURIComponent(docId)}`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error("Failed to reassemble document");
+      const payload = await res.json();
+      const version = payload?.version ? String(payload.version) : "";
+      if (version) {
+        setSelectedVersion(version);
+      }
+      toast({
+        title: "Document reassembled",
+        description: version ? `Created version ${version}.` : "New version created.",
+      });
+      const versionsRes = await fetch(`${apiBase}/draft-documents/versions?document_id=${encodeURIComponent(docId)}`);
+      if (versionsRes.ok) {
+        const versionsPayload = await versionsRes.json();
+        const versions = Array.isArray(versionsPayload?.versions) ? versionsPayload.versions.map(Number).filter(Number.isFinite) : [];
+        setAvailableVersions(versions);
+      }
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("id", docId);
+      nextParams.set("section", selectedSection);
+      if (version) nextParams.set("version", version);
+      setSearchParams(nextParams);
+    } catch (err) {
+      console.error("Failed to reassemble draft", err);
+      toast({
+        title: "Reassemble failed",
+        description: "Unable to reassemble document sections.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleInsertTable = () => {
@@ -561,6 +648,24 @@ export default function TPDocReview() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleReassemble}>
+            Reassemble
+          </Button>
+          <Label htmlFor="version-select" className="text-sm font-medium">
+            Version:
+          </Label>
+          <Select value={selectedVersion} onValueChange={handleVersionChange} disabled={availableVersions.length === 0}>
+            <SelectTrigger id="version-select" className="w-32">
+              <SelectValue placeholder="Latest" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableVersions.map((version) => (
+                <SelectItem key={version} value={String(version)}>
+                  V{version}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Label htmlFor="section-select" className="text-sm font-medium">
             Section:
           </Label>
@@ -581,7 +686,6 @@ export default function TPDocReview() {
           </Button> */}
         </div>
       </div>
-
       {/* Main Content - Split Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side - Editable Canvas */}

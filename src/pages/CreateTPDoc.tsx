@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "@/components/ui/use-toast";
+import { deriveTransferPricingMethod } from "@/lib/transferPricingMethod";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { WizardStepper, type StageStatus } from "@/components/wizard/WizardStepper";
 import {
@@ -108,6 +110,9 @@ const RPT_TYPES = [
   "Related Party Sales",
   "Other Income",
   "Expenses Paid",
+  "Subcontractor Fees Paid",
+  "Consultant Fees Paid",
+  "Equipment Fees Paid",
   "Expense paid on behalf of/by",
   "Receipt of Advances",
   "Provision of Advances",
@@ -207,7 +212,7 @@ type FormState = {
   keyBusinessDrivers: string;
   mainGeographicMarkets: string[]; // multi-select
   supplyChainDesc: string;
-  keyCompetitors: string[]; // multi-text
+  keyCompetitors: TableRow[];
   industryRegulatoryEconomic: string;
   restructuringOccurred: boolean | null;
   restructuringDetails: string;
@@ -235,12 +240,11 @@ type FormState = {
   localBusinessModel: string;
   localBusinessStrategyChoice: string;
   localBusinessStrategyDesc: string;
-  localSupplyChain: string;
 
   // 8
   departments: TableRow[];
   orgChartUpload: File | null;
-  managementReportingLine: string;
+  managementReportingLine: TableRow[];
 
   // 9
   formCUpload: File | null;
@@ -262,6 +266,7 @@ type FormState = {
   // 11
   customers: TableRow[];
   suppliers: TableRow[];
+  servicesProvided: TableRow[];
 
   // 12
   projects: TableRow[];
@@ -336,11 +341,10 @@ const initialState: FormState = {
   localBusinessModel: "",
   localBusinessStrategyChoice: "",
   localBusinessStrategyDesc: "",
-  localSupplyChain: "",
 
   departments: [],
   orgChartUpload: null,
-  managementReportingLine: "",
+  managementReportingLine: [],
 
   formCUpload: null,
   taxComputationUpload: null,
@@ -357,6 +361,7 @@ const initialState: FormState = {
 
   customers: [],
   suppliers: [],
+  servicesProvided: [],
 
   projects: [],
 
@@ -414,7 +419,6 @@ const FIELD_MAP = {
   localBusinessModel: "local_business_model",
   localBusinessStrategyChoice: "local_business_strategy_choice",
   localBusinessStrategyDesc: "local_business_strategy_desc",
-  localSupplyChain: "local_supply_chain",
   departments: "departments",
   orgChartUpload: "org_chart_upload",
   managementReportingLine: "management_reporting_line",
@@ -427,6 +431,7 @@ const FIELD_MAP = {
   lossReasons: "loss_reasons",
   customers: "customers",
   suppliers: "suppliers",
+  servicesProvided: "services_provided",
   projects: "projects",
   rptTypesSelected: "rpt_types_selected",
   rptDetailsByType: "rpt_details_by_type",
@@ -453,6 +458,58 @@ const NUMBER_FIELDS = new Set([
   "p375",
   "p625",
 ]);
+
+const DYNAMIC_TABLE_KEYS = new Set([
+  "groupOwnership",
+  "intangibleTransfers",
+  "relatedPartyBorrowings",
+  "thirdPartyFinancing",
+  "intercompanyServices",
+  "departments",
+  "customers",
+  "suppliers",
+  "projects",
+  "servicesProvided",
+  "keyCompetitors",
+  "functionsTable",
+  "risksTable",
+  "managementReportingLine",
+]);
+
+function normalizeTableRows(key: string, value: any): TableRow[] {
+  if (Array.isArray(value)) {
+    return value.map((row) => {
+      if (typeof row === "string") {
+        if (key === "keyCompetitors") {
+          return {
+            id: uid(),
+            competitor: row,
+            coRegNo: "",
+            financialYearEnded: "",
+            principalActivity: "",
+            country: "",
+            acceptedRejected: "",
+            reasons: "",
+          };
+        }
+        return { id: uid(), value: row };
+      }
+      if (key === "keyCompetitors" && row && typeof row === "object") {
+        const cleaned: Record<string, any> = {};
+        Object.entries(row).forEach(([k, v]) => {
+          if (/^\d+$/.test(k)) return;
+          cleaned[k] = v;
+        });
+        return { id: cleaned.id ?? uid(), ...cleaned };
+      }
+      return { id: row?.id ?? uid(), ...(row ?? {}) };
+    });
+  }
+  if (key === "managementReportingLine" && typeof value === "string" && value.trim()) {
+    return [{ id: uid(), name: value.trim(), title: "", company: "", country: "" }];
+  }
+  return [];
+}
 
 function toSerializable(value: any): any {
   if (value instanceof File) return { name: value.name };
@@ -544,7 +601,20 @@ const STAGES: Stage[] = [
         options: [...MARKETS],
       },
       { key: "supplyChainDesc", label: "Supply chain description", kind: "textarea" },
-      { key: "keyCompetitors", label: "Key competitors", kind: "multi_text", placeholder: "Add competitor and press Enter" },
+      {
+        key: "keyCompetitors",
+        label: "Key competitors",
+        kind: "dynamic_table",
+        columns: [
+          { key: "competitor", label: "Competitor", kind: "text" },
+          { key: "coRegNo", label: "Co. reg. no.", kind: "text" },
+          { key: "financialYearEnded", label: "Financial year ended", kind: "date" },
+          { key: "principalActivity", label: "Principal activity", kind: "text" },
+          { key: "country", label: "Country", kind: "dropdown", options: [...COUNTRIES] },
+          { key: "acceptedRejected", label: "Accepted / Rejected", kind: "dropdown", options: ["Accepted", "Rejected"] },
+          { key: "reasons", label: "Reasons", kind: "text" },
+        ],
+      },
       { key: "industryRegulatoryEconomic", label: "Industry / regulatory / economic conditions", kind: "textarea" },
       { key: "restructuringOccurred", label: "Business restructuring occurred?", kind: "yesno" },
       {
@@ -662,7 +732,6 @@ const STAGES: Stage[] = [
         options: ["Cost leadership", "Differentiation", "Focus/niche", "Growth/expansion", "Stability", "Other"],
       },
       { key: "localBusinessStrategyDesc", label: "Business strategy (details)", kind: "textarea" },
-      { key: "localSupplyChain", label: "Local supply chain", kind: "textarea" },
     ],
   },
   {
@@ -683,7 +752,17 @@ const STAGES: Stage[] = [
         ],
       },
       { key: "orgChartUpload", label: "Organisation chart upload", kind: "file" },
-      { key: "managementReportingLine", label: "Management reporting line", kind: "textarea" },
+      {
+        key: "managementReportingLine",
+        label: "Local management reporting line",
+        kind: "dynamic_table",
+        columns: [
+          { key: "name", label: "Name", kind: "text" },
+          { key: "title", label: "Title", kind: "text" },
+          { key: "company", label: "Company", kind: "text" },
+          { key: "country", label: "Country", kind: "dropdown", options: [...COUNTRIES] },
+        ],
+      },
     ],
   },
   {
@@ -725,13 +804,28 @@ const STAGES: Stage[] = [
   },
   {
     id: "11",
-    title: "11. Customers & Suppliers",
+    title: "11. Services Provided, Customers & Suppliers",
     source: "PRI",
     purpose: "Section 2.9 + comparability",
     fields: [
       {
+        key: "servicesProvided",
+        label: "Services provided",
+        kind: "dynamic_table",
+        columns: [
+          { key: "projectType", label: "Project type", kind: "text" },
+          { key: "contractingParty", label: "Contracting party", kind: "text" },
+          { key: "contractDetails", label: "Contract details", kind: "text" },
+          { key: "contractSum", label: "Contract sum", kind: "number" },
+          { key: "projectMargin", label: "Project margin", kind: "number" },
+          { key: "startYear", label: "Start year", kind: "date" },
+          { key: "completionYear", label: "Completion year", kind: "date" },
+          { key: "status", label: "Status", kind: "text" },
+        ],
+      },
+      {
         key: "customers",
-        label: "Top 5 customers",
+        label: "Main Customers",
         kind: "dynamic_table",
         columns: [
           { key: "customerName", label: "Customer name", kind: "text" },
@@ -743,14 +837,14 @@ const STAGES: Stage[] = [
       },
       {
         key: "suppliers",
-        label: "Top 5 suppliers",
+        label: "Main Suppliers",
         kind: "dynamic_table",
         columns: [
-          { key: "supplierName", label: "Supplier name", kind: "text" },
-          { key: "relatedOrThirdParty", label: "Related / third party", kind: "toggle" },
-          { key: "productService", label: "Product / service", kind: "text" },
-          { key: "country", label: "Country", kind: "dropdown", options: [...COUNTRIES] },
-          { key: "amount", label: "Amount", kind: "number" },
+          { key: "thirdPartySuppliers", label: "Third Party Suppliers", kind: "text" },
+          { key: "servicesDescription", label: "Services Decription", kind: "text" },
+          { key: "currency", label: "Currency", kind: "dropdown", options: [...CURRENCIES] },
+          { key: "creditTerm", label: "Credit Term", kind: "dropdown", options: [...CREDIT_TERMS] },
+          { key: "amountRm", label: "Amount (RM)", kind: "number" },
         ],
       },
     ],
@@ -1161,30 +1255,7 @@ function DynamicTable({
 // -----------------------------
 
 function deriveMethodology(state: FormState) {
-  const testedParty = state.companyName || "(Company)";
-
-  const hasSales = state.rptTypesSelected.includes("Related Party Sales");
-  const hasPurchases = state.rptTypesSelected.includes("Related Party Purchase");
-  const hasServices = state.rptTypesSelected.includes("Intercompany Services") || state.intercompanyServices.length > 0;
-
-  // Risk profile proxy: count high risks
-  const highRisks = state.risksTable.filter((r) => (r.assumptionLevel ?? "").toString().toLowerCase() === "high").length;
-  const isRoutine = highRisks === 0;
-
-  // Heuristic method pick
-  let method = "TNMM";
-  if (hasSales && !hasPurchases && isRoutine) method = "RPM";
-  else if (hasPurchases && !hasSales && isRoutine) method = "CPM";
-  else if (hasServices && isRoutine) method = "TNMM";
-  else if (!isRoutine) method = "PSM";
-
-  // PLI heuristic
-  let pli = "Operating Margin (ROS)";
-  if (method === "CPM") pli = "Cost Plus Mark-up";
-  if (method === "RPM") pli = "Gross Margin";
-  if (method === "PSM") pli = "Residual/Contribution Split";
-
-  return { testedParty, method, pli };
+  return deriveTransferPricingMethod(state as unknown as Record<string, any>);
 }
 
 function hasValue(val: any) {
@@ -1246,7 +1317,12 @@ export default function CreateTPDoc() {
       const apiKey = FIELD_MAP[key];
       if (doc[apiKey] !== undefined && doc[apiKey] !== null) {
         const value = doc[apiKey];
-        (next as any)[key] = NUMBER_FIELDS.has(key as string) && typeof value === "number" ? String(value) : value;
+        if (DYNAMIC_TABLE_KEYS.has(key as string)) {
+          (next as any)[key] = normalizeTableRows(key as string, value);
+        } else {
+          (next as any)[key] =
+            NUMBER_FIELDS.has(key as string) && typeof value === "number" ? String(value) : value;
+        }
       }
     });
     return { ...initialState, ...next };
@@ -1302,6 +1378,10 @@ export default function CreateTPDoc() {
       setDocumentCache(doc);
       sessionStorage.setItem(`tpgps-doc-${draftId}`, JSON.stringify(doc));
       applyDocumentToState(doc);
+      toast({
+        title: "Draft saved",
+        description: "Your changes have been saved successfully.",
+      });
     } catch (err) {
       console.error("Failed to save draft", err);
     }
@@ -1363,10 +1443,8 @@ export default function CreateTPDoc() {
     applyDocumentToState(documentCache);
   }, [documentCache, draftId, draftLoaded, applyDocumentToState]);
 
-  const completionState = useMemo(() => {
-    if (documentCache) return buildStateFromDocument(documentCache);
-    return state;
-  }, [buildStateFromDocument, documentCache, state]);
+  // Validation/progress must follow the live form state, not last saved snapshot.
+  const completionState = state;
 
   const stageCompletion = useMemo(() => {
     const result: Record<
@@ -1547,8 +1625,15 @@ export default function CreateTPDoc() {
     if (!stageCompletion[stage.id]?.requiredComplete) return;
     await saveDraft(stage);
     if (stageIndex >= visibleStages.length - 1) {
-      // eslint-disable-next-line no-alert
-      alert("All stages completed (stub). Trigger draft generation here.");
+      if (!draftId) {
+        toast({
+          title: "Missing draft id",
+          description: "Unable to open review without a draft id.",
+          variant: "destructive",
+        });
+        return;
+      }
+      navigate(`/tp-docs/review-method?id=${encodeURIComponent(draftId)}`);
       return;
     }
     setCurrentStageId(visibleStages[stageIndex + 1]?.id ?? stage.id);
@@ -1576,7 +1661,7 @@ export default function CreateTPDoc() {
               { key: "relatedPartyEntity", label: "Related party entity", kind: "text" },
               { key: "natureOfTransaction", label: "Nature of transaction", kind: "text" },
               { key: "amount", label: "Amount", kind: "number" },
-              { key: "currency", label: "Currency", kind: "dropdown", options: [...CURRENCIES] },
+              { key: "country", label: "Country", kind: "text" },
             ];
             if (type === "Receipt of Advances" || type === "Provision of Advances") {
               columns = [

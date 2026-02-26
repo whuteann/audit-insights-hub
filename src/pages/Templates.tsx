@@ -1,36 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 type TemplateItem = {
   id: string;
   name: string;
   content: any[];
-  section_rules_id: string;
-  section_id: string;
-  section: string;
-  title: string;
+  section_rules_id: string | null;
+  section_id: string | null;
+  section: string | null;
+  title: string | null;
   description: string | null;
   updated_at: string | null;
 };
 
 export default function Templates() {
+  const navigate = useNavigate();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selected, setSelected] = useState<TemplateItem | null>(null);
-  const [draftName, setDraftName] = useState("");
-  const [draftJson, setDraftJson] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   const loadTemplates = () => {
     setIsLoading(true);
@@ -49,62 +39,34 @@ export default function Templates() {
     loadTemplates();
   }, [apiBase]);
 
-  const openEditor = (tpl: TemplateItem) => {
-    setSelected(tpl);
-    setDraftName(tpl.name);
-    setDraftJson(JSON.stringify(tpl.content ?? [], null, 2));
-    setError(null);
-  };
-
-  const closeEditor = () => {
-    setSelected(null);
-    setDraftName("");
-    setDraftJson("");
-    setError(null);
-  };
-
-  const saveTemplate = async () => {
-    if (!selected) return;
-    setError(null);
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(draftJson);
-      if (!Array.isArray(parsed)) {
-        setError("Content must be a JSON array of blocks.");
-        return;
-      }
-    } catch (e) {
-      setError("Invalid JSON.");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${apiBase}/templates/${selected.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: draftName.trim() || selected.name, content: parsed }),
-      });
-      if (!res.ok) throw new Error("Failed to save template");
-      const updated = await res.json();
-      setTemplates((prev) =>
-        prev.map((t) => (t.id === selected.id ? { ...t, ...updated } : t))
-      );
-      closeEditor();
-    } catch (err) {
-      console.error(err);
-      setError("Failed to save template.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
-      if (a.section === b.section) return a.section_id.localeCompare(b.section_id);
-      return a.section.localeCompare(b.section);
+      const aSection = a.section ?? "999";
+      const bSection = b.section ?? "999";
+      if (aSection === bSection) return (a.section_id ?? "").localeCompare(b.section_id ?? "");
+      return aSection.localeCompare(bSection);
     });
   }, [templates]);
+
+  const createTemplate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      setIsCreating(true);
+      const res = await fetch(`${apiBase}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("Failed to create template");
+      const created = await res.json();
+      navigate(`/templates/edit/${created.id}`);
+    } catch (err) {
+      console.error("Failed to create template", err);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -115,9 +77,29 @@ export default function Templates() {
             Manage section templates used in document assembly.
           </p>
         </div>
-        <Button variant="outline" onClick={loadTemplates} disabled={isLoading}>
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            className="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm"
+            placeholder="New template title"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createTemplate();
+              }
+            }}
+          />
+          <Button onClick={createTemplate} disabled={isCreating || !newName.trim()}>
+            {isCreating ? "Creating..." : "Add New"}
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/templates/industry-analysis")}>
+            Industry Analysis
+          </Button>
+          <Button variant="outline" onClick={loadTemplates} disabled={isLoading}>
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card">
@@ -135,13 +117,17 @@ export default function Templates() {
           <div className="divide-y">
             {sortedTemplates.map((tpl) => (
               <div key={tpl.id} className="grid grid-cols-[140px_1fr_120px_120px] gap-3 px-4 py-3 text-sm">
-                <div className="font-medium">{tpl.section_id}</div>
-                <div>{tpl.title}</div>
+                <div className="font-medium">{tpl.section_id ?? "-"}</div>
+                <div>{tpl.title ?? tpl.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {tpl.updated_at ? new Date(tpl.updated_at).toLocaleDateString() : "—"}
                 </div>
                 <div className="text-right">
-                  <Button size="sm" variant="outline" onClick={() => openEditor(tpl)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/templates/edit/${tpl.id}`)}
+                  >
                     Edit
                   </Button>
                 </div>
@@ -150,37 +136,6 @@ export default function Templates() {
           </div>
         )}
       </div>
-
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => (!open ? closeEditor() : null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit Template</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Template name</Label>
-              <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
-            </div>
-            <div className="grid gap-2 flex-1">
-              <Label>Content (JSON array)</Label>
-              <Textarea
-                value={draftJson}
-                onChange={(e) => setDraftJson(e.target.value)}
-                className="font-mono text-xs min-h-[45vh]"
-              />
-            </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={closeEditor}>
-                Cancel
-              </Button>
-              <Button onClick={saveTemplate} disabled={isSaving}>
-                Save
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

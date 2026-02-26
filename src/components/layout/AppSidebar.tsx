@@ -1,4 +1,4 @@
-import { FileText, Building2, ClipboardList, LayoutDashboard, FileCode2 } from "lucide-react";
+import { FileText, Building2, ClipboardList, LayoutDashboard, FileCode2, Network, Mail } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -6,6 +6,8 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "TP Docs", href: "/tp-docs", icon: FileText },
   { name: "Templates", href: "/templates", icon: FileCode2 },
+  { name: "Email Templates", href: "/email-templates", icon: Mail },
+  { name: "Global Structure", href: "/assembly", icon: Network },
   { name: "Companies", href: "/companies", icon: Building2 },
   { name: "Audit Trail", href: "/audit-trail", icon: ClipboardList },
 ];

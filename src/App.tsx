@@ -15,6 +15,8 @@ import TemplatesEdit from "@/pages/TemplatesEdit";
 import TemplatesIndustryAnalysis from "@/pages/TemplatesIndustryAnalysis";
 import AssemblyStructure from "@/pages/AssemblyStructure";
 import AssemblySectionEdit from "@/pages/AssemblySectionEdit";
+import EmailTemplates from "@/pages/EmailTemplates";
+import EmailTemplateEditor from "@/pages/EmailTemplateEditor";
 
 // Companies Module
 import CompanyListing from "@/pages/CompanyListing";
@@ -57,6 +59,9 @@ const App = () => (
             <Route path="/templates/industry-analysis" element={<TemplatesIndustryAnalysis />} />
             <Route path="/assembly" element={<AssemblyStructure />} />
             <Route path="/assembly/sections/:id" element={<AssemblySectionEdit />} />
+            <Route path="/email-templates" element={<EmailTemplates />} />
+            <Route path="/email-templates/new" element={<EmailTemplateEditor />} />
+            <Route path="/email-templates/:id/edit" element={<EmailTemplateEditor />} />
             
             {/* Companies Module */}
             <Route path="/companies" element={<CompanyListing />} />

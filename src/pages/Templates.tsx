@@ -6,10 +6,10 @@ type TemplateItem = {
   id: string;
   name: string;
   content: any[];
-  section_rules_id: string;
-  section_id: string;
-  section: string;
-  title: string;
+  section_rules_id: string | null;
+  section_id: string | null;
+  section: string | null;
+  title: string | null;
   description: string | null;
   updated_at: string | null;
 };
@@ -19,6 +19,8 @@ export default function Templates() {
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   const loadTemplates = () => {
     setIsLoading(true);
@@ -39,10 +41,32 @@ export default function Templates() {
 
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
-      if (a.section === b.section) return a.section_id.localeCompare(b.section_id);
-      return a.section.localeCompare(b.section);
+      const aSection = a.section ?? "999";
+      const bSection = b.section ?? "999";
+      if (aSection === bSection) return (a.section_id ?? "").localeCompare(b.section_id ?? "");
+      return aSection.localeCompare(bSection);
     });
   }, [templates]);
+
+  const createTemplate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      setIsCreating(true);
+      const res = await fetch(`${apiBase}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("Failed to create template");
+      const created = await res.json();
+      navigate(`/templates/edit/${created.id}`);
+    } catch (err) {
+      console.error("Failed to create template", err);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -54,6 +78,21 @@ export default function Templates() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <input
+            className="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm"
+            placeholder="New template title"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createTemplate();
+              }
+            }}
+          />
+          <Button onClick={createTemplate} disabled={isCreating || !newName.trim()}>
+            {isCreating ? "Creating..." : "Add New"}
+          </Button>
           <Button variant="outline" onClick={() => navigate("/templates/industry-analysis")}>
             Industry Analysis
           </Button>
@@ -78,8 +117,8 @@ export default function Templates() {
           <div className="divide-y">
             {sortedTemplates.map((tpl) => (
               <div key={tpl.id} className="grid grid-cols-[140px_1fr_120px_120px] gap-3 px-4 py-3 text-sm">
-                <div className="font-medium">{tpl.section_id}</div>
-                <div>{tpl.title}</div>
+                <div className="font-medium">{tpl.section_id ?? "-"}</div>
+                <div>{tpl.title ?? tpl.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {tpl.updated_at ? new Date(tpl.updated_at).toLocaleDateString() : "—"}
                 </div>

@@ -17,6 +17,7 @@ import {
   Columns2,
   TableCellsMerge,
   TableCellsSplit,
+  FileDown,
 } from "lucide-react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -54,6 +55,7 @@ type DraftSection = {
   description: string | null;
   content_html: string | null;
   source_fields: string[];
+  is_snapshot?: boolean;
 };
 
 type DocumentHeader = {
@@ -86,6 +88,8 @@ export default function TPDocReview() {
   const [selectedSection, setSelectedSection] = useState<string>(sectionParam ?? "1");
   const [availableVersions, setAvailableVersions] = useState<number[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>(versionParam ?? "");
+  const [isExporting, setIsExporting] = useState(false);
+  const [isSavingSection, setIsSavingSection] = useState(false);
   const [dataSearch, setDataSearch] = useState("");
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
@@ -183,8 +187,11 @@ export default function TPDocReview() {
   const sectionsToHtml = (sections: Array<DraftSection & { displaySectionId: string }>) =>
     sections
       .map((section) => {
-        const heading = `<h2>${section.displaySectionId} ${section.title}</h2>`;
         const body = section.content_html || "<p></p>";
+        if (section.is_snapshot) {
+          return `<section data-draft-section-id="${section.draft_section_id}">${body}</section>`;
+        }
+        const heading = `<h2>${section.displaySectionId} ${section.title}</h2>`;
         return `<section data-draft-section-id="${section.draft_section_id}">${heading}${body}</section>`;
       })
       .join("") || "<p></p>";
@@ -380,6 +387,72 @@ export default function TPDocReview() {
         description: "Unable to reassemble document sections.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleDownloadWord = async () => {
+    if (!docId) return;
+    try {
+      setIsExporting(true);
+      const versionQuery = selectedVersion ? `&version=${encodeURIComponent(selectedVersion)}` : "";
+      const res = await fetch(
+        `${apiBase}/draft-documents/export-docx?document_id=${encodeURIComponent(docId)}${versionQuery}`
+      );
+      if (!res.ok) throw new Error("Failed to export Word document");
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get("Content-Disposition") ?? "";
+      const filenameMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+      const filename = filenameMatch?.[1] || `TPD_${docId}.docx`;
+
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Download failed",
+        description: "Unable to export Word document.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveSection = async () => {
+    if (!docId || !selectedVersion || !editor) return;
+    try {
+      setIsSavingSection(true);
+      const res = await fetch(`${apiBase}/draft-documents/section-snapshots`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document_id: docId,
+          version: Number(selectedVersion),
+          section: selectedSection,
+          content_html: editor.getHTML(),
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save section snapshot");
+      toast({
+        title: "Saved",
+        description: `Section ${selectedSection} saved to this draft version.`,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Save failed",
+        description: "Unable to save section changes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSection(false);
     }
   };
 
@@ -650,6 +723,13 @@ export default function TPDocReview() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleReassemble}>
             Reassemble
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSaveSection} disabled={isSavingSection}>
+            {isSavingSection ? "Saving..." : "Save Section"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadWord} disabled={isExporting}>
+            <FileDown className="w-4 h-4 mr-2" />
+            {isExporting ? "Exporting..." : "Download Word"}
           </Button>
           <Label htmlFor="version-select" className="text-sm font-medium">
             Version:

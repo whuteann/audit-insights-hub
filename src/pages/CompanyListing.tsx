@@ -118,21 +118,21 @@ export default function CompanyListing() {
         description="Manage your company database for comparable screening"
         actions={
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => navigate("/companies/upload")}>
+            <Button onClick={() => navigate("/companies/upload")}>
               <Upload className="w-4 h-4 mr-2" />
-              Upload Excel
+              Perform Analysis
             </Button>
-            <Button onClick={() => setIsScreeningModalOpen(true)}>
+            {/* <Button onClick={() => setIsScreeningModalOpen(true)}>
               <Filter className="w-4 h-4 mr-2" />
               Screen Companies
-            </Button>
+            </Button> */}
           </div>
         }
       />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 mb-6">
-        <Card>
+        {/* <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-medium">Screened This Week</CardTitle>
           </CardHeader>
@@ -142,15 +142,15 @@ export default function CompanyListing() {
               Companies screened this week
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-medium">In Database</CardTitle>
+            <CardTitle className="text-base font-medium">Total Analyses</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.totalInDatabase}</div>
             <p className="text-sm text-muted-foreground mt-1">
-              Total companies in database
+              Total analyses performed
             </p>
           </CardContent>
         </Card>

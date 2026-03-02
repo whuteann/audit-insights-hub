@@ -97,7 +97,7 @@ export default function TPDocReview() {
   const [activePanel, setActivePanel] = useState<"data" | "assistant">("data");
   const [isFilePreviewOpen, setIsFilePreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<Record<string, any> | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
@@ -1047,26 +1047,26 @@ export default function TPDocReview() {
         {/* Right Side - Chatbot + Document Data */}
         <div className="w-96 flex flex-col bg-card border-l">
           <div className="flex flex-col h-full">
-            <div className="h-12 border-b flex items-center px-4 shrink-0">
-              <div className="flex w-full gap-2">
-                {/* <Button
+            {/* <div className="h-12 border-b flex items-center px-4 shrink-0">
+              <div className="flex w-full gap-2 overflow-x-auto">
+                <Button
                   variant={activePanel === "data" ? "default" : "outline"}
                   size="sm"
                   className="flex-1"
                   onClick={() => setActivePanel("data")}
                 >
                   Document Data
-                </Button> */}
-                {/* <Button
+                </Button>
+                <Button
                   variant={activePanel === "assistant" ? "default" : "outline"}
                   size="sm"
                   className="flex-1"
                   onClick={() => setActivePanel("assistant")}
                 >
                   AI Assistant
-                </Button> */}
+                </Button>
               </div>
-            </div>
+            </div> */}
 
             {activePanel === "data" ? (
               <div className="flex-1 flex flex-col overflow-hidden">
@@ -1136,21 +1136,21 @@ export default function TPDocReview() {
                                   (() => {
                                     const fileMeta = value;
                                     return (
-                                  <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                                    <p className="text-sm font-medium break-all">
-                                      {fileMeta.original_name || fileMeta.filename || "Uploaded file"}
-                                    </p>
-                                    <div className="text-xs text-muted-foreground space-y-1">
-                                      <p>Size: {formatFileSize(fileMeta.size_bytes)}</p>
-                                      <p>
-                                        Uploaded:{" "}
-                                        {fileMeta.uploaded_at ? new Date(fileMeta.uploaded_at).toLocaleString() : "—"}
-                                      </p>
-                                    </div>
-                                    <Button type="button" size="sm" variant="outline" onClick={() => openFilePreview(fileMeta)}>
-                                      View
-                                    </Button>
-                                  </div>
+                                      <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                                        <p className="text-sm font-medium break-all">
+                                          {fileMeta.original_name || fileMeta.filename || "Uploaded file"}
+                                        </p>
+                                        <div className="text-xs text-muted-foreground space-y-1">
+                                          <p>Size: {formatFileSize(fileMeta.size_bytes)}</p>
+                                          <p>
+                                            Uploaded:{" "}
+                                            {fileMeta.uploaded_at ? new Date(fileMeta.uploaded_at).toLocaleString() : "—"}
+                                          </p>
+                                        </div>
+                                        <Button type="button" size="sm" variant="outline" onClick={() => openFilePreview(fileMeta)}>
+                                          View
+                                        </Button>
+                                      </div>
                                     );
                                   })()
                                 ) : value && typeof value === "object" && !Array.isArray(value) ? (
@@ -1204,9 +1204,8 @@ export default function TPDocReview() {
                       messages.map((message) => (
                         <div
                           key={message.id}
-                          className={`flex gap-3 ${
-                            message.role === "user" ? "justify-end" : "justify-start"
-                          }`}
+                          className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"
+                            }`}
                         >
                           {message.role === "assistant" && (
                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -1214,11 +1213,10 @@ export default function TPDocReview() {
                             </div>
                           )}
                           <div
-                            className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                              message.role === "user"
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
-                            }`}
+                            className={`max-w-[80%] rounded-lg px-4 py-2 ${message.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted"
+                              }`}
                           >
                             <p className="text-sm whitespace-pre-wrap">
                               {message.content}

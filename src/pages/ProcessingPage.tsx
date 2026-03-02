@@ -1,19 +1,7 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Loader2, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function ProcessingPage() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate("/companies/processed");
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [navigate]);
-
   return (
     <div className="page-container flex items-center justify-center min-h-[80vh]">
       <Card className="w-full max-w-md">

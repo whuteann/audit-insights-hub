@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
+import ProcessingPage from "@/pages/ProcessingPage";
 
 export default function UploadExcel() {
   const navigate = useNavigate();
@@ -84,7 +85,7 @@ export default function UploadExcel() {
         title: "Analysis started",
         description: "Benchmark analysis request submitted.",
       });
-      navigate(`/companies/processing?analysis_id=${encodeURIComponent(analysis?.id ?? "")}`);
+      navigate(`/companies/analyses/${encodeURIComponent(analysis?.id ?? "")}`);
     } catch (error) {
       console.error(error);
       toast({
@@ -96,6 +97,10 @@ export default function UploadExcel() {
       setIsSubmitting(false);
     }
   };
+
+  if (isSubmitting) {
+    return <ProcessingPage />;
+  }
 
   return (
     <div className="page-container max-w-2xl mx-auto">

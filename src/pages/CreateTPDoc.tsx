@@ -188,6 +188,16 @@ type Stage = {
   visibleIf?: (state: FormState) => boolean;
 };
 
+type UploadedFileMeta = {
+  path: string;
+  original_name?: string;
+  filename?: string;
+  content_type?: string;
+  size_bytes?: number;
+  uploaded_at?: string;
+  download_url?: string;
+};
+
 // -----------------------------
 // Form State
 // -----------------------------
@@ -221,7 +231,7 @@ type FormState = {
   intangibleTypes: string[]; // checkbox group
   ipOwnerEntity: string;
   intangibleAgreementsExist: boolean | null;
-  intangibleAgreementsUpload: File | null;
+  intangibleAgreementsUpload: File | UploadedFileMeta | null;
   intangibleTransferDuringFY: boolean | null;
   intangibleTransfers: TableRow[];
 
@@ -243,13 +253,13 @@ type FormState = {
 
   // 8
   departments: TableRow[];
-  orgChartUpload: File | null;
+  orgChartUpload: File | UploadedFileMeta | null;
   managementReportingLine: TableRow[];
 
   // 9
-  formCUpload: File | null;
-  taxComputationUpload: File | null;
-  managementAccountsUpload: File | null;
+  formCUpload: File | UploadedFileMeta | null;
+  taxComputationUpload: File | UploadedFileMeta | null;
+  managementAccountsUpload: File | UploadedFileMeta | null;
   consolidatedGroupRevenue: string;
   localProfitBeforeTax: string;
   apaExists: boolean | null;
@@ -446,6 +456,17 @@ const FIELD_MAP = {
   p375: "p375",
   p625: "p625",
 } as const;
+
+const FILE_FIELD_KEYS = [
+  "intangibleAgreementsUpload",
+  "orgChartUpload",
+  "formCUpload",
+  "taxComputationUpload",
+  "managementAccountsUpload",
+] as const;
+
+const FILE_FIELD_KEY_SET = new Set<string>(FILE_FIELD_KEYS);
+const FILE_ACCEPT_TYPES = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg";
 
 const NUMBER_FIELDS = new Set([
   "fundingThirdPartyPct",
@@ -1103,10 +1124,15 @@ function FileUpload({
   accept,
 }: {
   label: string;
-  value: File | null;
+  value: File | UploadedFileMeta | null;
   onChange: (f: File | null) => void;
   accept?: string;
 }) {
+  const displayName = value
+    ? value instanceof File
+      ? value.name
+      : value.original_name || value.filename || "Uploaded file"
+    : null;
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -1118,10 +1144,10 @@ function FileUpload({
         />
         <Button type="button" variant="outline" onClick={() => {}}>
           <Upload className="h-4 w-4 mr-2" />
-          Upload
+          Select
         </Button>
       </div>
-      {value ? <p className="text-xs text-muted-foreground">Selected: {value.name}</p> : null}
+      {displayName ? <p className="text-xs text-muted-foreground">Selected: {displayName}</p> : null}
     </div>
   );
 }
@@ -1363,11 +1389,32 @@ export default function CreateTPDoc() {
 
   const saveDraft = useCallback(async (st: Stage) => {
     if (!draftId) return;
-    const fieldKeys = getStageFieldKeys(st);
-    const payload = toApiPayload(state, derived, fieldKeys);
-
-    console.log(payload);
     try {
+      const fieldKeys = getStageFieldKeys(st);
+      const nextState: FormState = { ...state };
+
+      // Upload selected files first, then save stage payload.
+      for (const key of fieldKeys) {
+        if (!FILE_FIELD_KEY_SET.has(key)) continue;
+        const currentValue = (nextState as any)[key];
+        if (!(currentValue instanceof File)) continue;
+
+        const formData = new FormData();
+        formData.append("field_key", FIELD_MAP[key]);
+        formData.append("file", currentValue);
+
+        const uploadRes = await fetch(`${apiBase}/drafts/${draftId}/files`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!uploadRes.ok) {
+          throw new Error(`Failed to upload file for ${key}`);
+        }
+        const uploadJson = await uploadRes.json();
+        (nextState as any)[key] = uploadJson.file as UploadedFileMeta;
+      }
+
+      const payload = toApiPayload(nextState, derived, fieldKeys);
       const res = await fetch(`${apiBase}/drafts/${draftId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1375,6 +1422,7 @@ export default function CreateTPDoc() {
       });
       if (!res.ok) throw new Error("Failed to save draft");
       const doc = await res.json();
+      setState(nextState);
       setDocumentCache(doc);
       sessionStorage.setItem(`tpgps-doc-${draftId}`, JSON.stringify(doc));
       applyDocumentToState(doc);
@@ -1983,7 +2031,7 @@ export default function CreateTPDoc() {
             label={label}
             value={val ?? null}
             onChange={(file) => setField(bf.key as keyof FormState, file)}
-            accept=".pdf,image/*"
+            accept={FILE_ACCEPT_TYPES}
           />
         );
       case "toggle":

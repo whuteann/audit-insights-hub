@@ -1,68 +1,112 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Filter } from "lucide-react";
+import { Upload, Filter, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/ui/DataTable";
 import { ScreeningPromptModal } from "@/components/modals/ScreeningPromptModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockCompanies, mockProcessedCompanies, mockAuditEntries, Company } from "@/data/mockData";
+import { toast } from "@/components/ui/use-toast";
+
+type AnalysisListItem = {
+  id: string;
+  company_name: string;
+  status: string;
+  total_companies: number;
+  accepted_count: number;
+  potential_count: number;
+  rejected_count: number;
+  created_at: string;
+};
 
 export default function CompanyListing() {
   const navigate = useNavigate();
   const [isScreeningModalOpen, setIsScreeningModalOpen] = useState(false);
+  const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
+  const [analyses, setAnalyses] = useState<AnalysisListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetch(`${apiBase}/benchmark/analyses?limit=50&offset=0`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => setAnalyses(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error("Failed to load analyses", err);
+        toast({
+          title: "Load failed",
+          description: "Unable to load benchmark analyses.",
+          variant: "destructive",
+        });
+      })
+      .finally(() => setIsLoading(false));
+  }, [apiBase]);
 
   const stats = useMemo(() => {
-    // Calculate companies screened this week
     const now = new Date();
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+    startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
 
-    const screenedThisWeek = mockAuditEntries.filter((entry) => {
-      if (entry.action !== "Ran Company Screening") return false;
-      const entryDate = new Date(entry.timestamp);
-      return entryDate >= startOfWeek;
+    const screenedThisWeek = analyses.filter((analysis) => {
+      const created = new Date(analysis.created_at);
+      return created >= startOfWeek;
     }).length;
-
-    // Total companies processed
-    const totalProcessed = mockProcessedCompanies.length;
-
-    // Total companies in database
-    const totalInDatabase = mockCompanies.length;
+    const totalInDatabase = analyses.length;
 
     return {
       screenedThisWeek,
-      totalProcessed,
       totalInDatabase,
     };
-  }, []);
+  }, [analyses]);
 
   const columns = [
     {
-      key: "name",
-      header: "Company Name",
-      render: (company: Company) => (
-        <span className="font-medium text-foreground">{company.name}</span>
+      key: "company_name",
+      header: "Subject Company",
+      render: (analysis: AnalysisListItem) => (
+        <span className="font-medium text-foreground">{analysis.company_name}</span>
       ),
     },
     {
-      key: "country",
-      header: "Country",
+      key: "status",
+      header: "Status",
     },
     {
-      key: "industry",
-      header: "Industry",
+      key: "total_companies",
+      header: "Total",
     },
     {
-      key: "revenue",
-      header: "Revenue",
+      key: "accepted_count",
+      header: "Accepted",
     },
     {
-      key: "addedDate",
-      header: "Added Date",
-      render: (company: Company) => (
-        <span className="text-muted-foreground">{company.addedDate}</span>
+      key: "potential_count",
+      header: "Potential",
+    },
+    {
+      key: "rejected_count",
+      header: "Rejected",
+    },
+    {
+      key: "created_at",
+      header: "Created",
+      render: (analysis: AnalysisListItem) => (
+        <span className="text-muted-foreground">{new Date(analysis.created_at).toLocaleString()}</span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (analysis: AnalysisListItem) => (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate(`/companies/analyses/${analysis.id}`)}
+        >
+          <Eye className="w-4 h-4 mr-2" />
+          View
+        </Button>
       ),
     },
   ];
@@ -114,9 +158,9 @@ export default function CompanyListing() {
 
       <DataTable
         columns={columns}
-        data={mockCompanies}
-        getRowKey={(company) => company.id}
-        emptyMessage="No companies yet. Upload an Excel file to get started."
+        data={analyses}
+        getRowKey={(analysis) => analysis.id}
+        emptyMessage={isLoading ? "Loading analyses..." : "No analyses yet. Upload an Excel file to get started."}
       />
 
       <ScreeningPromptModal

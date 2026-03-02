@@ -24,6 +24,7 @@ import UploadExcel from "@/pages/UploadExcel";
 import ProcessingPage from "@/pages/ProcessingPage";
 import ProcessedCompanies from "@/pages/ProcessedCompanies";
 import ScreeningResults from "@/pages/ScreeningResults";
+import AnalysisDetail from "@/pages/AnalysisDetail";
 
 // Audit Trail Module
 import AuditTrail from "@/pages/AuditTrail";
@@ -69,6 +70,7 @@ const App = () => (
             <Route path="/companies/processing" element={<ProcessingPage />} />
             <Route path="/companies/processed" element={<ProcessedCompanies />} />
             <Route path="/companies/screening-results" element={<ScreeningResults />} />
+            <Route path="/companies/analyses/:id" element={<AnalysisDetail />} />
             
             {/* Audit Trail Module */}
             <Route path="/audit-trail" element={<AuditTrail />} />

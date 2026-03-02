@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import {
   Select,
@@ -94,6 +95,8 @@ export default function TPDocReview() {
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [activePanel, setActivePanel] = useState<"data" | "assistant">("data");
+  const [isFilePreviewOpen, setIsFilePreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<Record<string, any> | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -638,7 +641,74 @@ export default function TPDocReview() {
       .filter((section) => section.fields.length > 0);
   }, [dataSections, dataSearch]);
 
-  const renderValue = (field: { key: string; label: string; kind: string }) => {
+  const isFileMetadata = (value: unknown): value is Record<string, any> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const v = value as Record<string, any>;
+    return (typeof v.path === "string" || typeof v.download_url === "string") &&
+      (typeof v.original_name === "string" || typeof v.filename === "string");
+  };
+
+  const formatFileSize = (sizeBytes?: number) => {
+    if (!sizeBytes || sizeBytes <= 0) return "—";
+    if (sizeBytes < 1024) return `${sizeBytes} B`;
+    if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const humanizeKey = (key: string) =>
+    key
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^\w/, (c) => c.toUpperCase());
+
+  const getDownloadUrl = (meta: Record<string, any>) => {
+    const raw = meta.download_url as string | undefined;
+    if (!raw) return null;
+    if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+    return `${apiBase}${raw}`;
+  };
+
+  const getPreviewUrl = (meta: Record<string, any>) => {
+    const url = getDownloadUrl(meta);
+    if (!url) return null;
+    const hasQuery = url.includes("?");
+    return `${url}${hasQuery ? "&" : "?"}inline=1`;
+  };
+
+  const triggerDownload = (meta: Record<string, any>) => {
+    const url = getDownloadUrl(meta);
+    if (!url) return;
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = meta.original_name || meta.filename || "download";
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const openFilePreview = (meta: Record<string, any>) => {
+    setPreviewFile(meta);
+    setIsFilePreviewOpen(true);
+  };
+
+  const isPreviewableFile = (meta: Record<string, any>) => {
+    const contentType = String(meta.content_type || "").toLowerCase();
+    const name = String(meta.original_name || meta.filename || "").toLowerCase();
+    return (
+      contentType === "application/pdf" ||
+      contentType === "image/png" ||
+      contentType === "image/jpeg" ||
+      contentType === "image/jpg" ||
+      name.endsWith(".pdf") ||
+      name.endsWith(".png") ||
+      name.endsWith(".jpg") ||
+      name.endsWith(".jpeg")
+    );
+  };
+
+  const renderValue = (field: { key: string; label: string; kind: string }): unknown => {
     if (!documentData) return "—";
     const value = documentData[field.key];
     if (value === null || value === undefined || value === "") return "—";
@@ -651,6 +721,7 @@ export default function TPDocReview() {
       }
     }
     if (field.kind === "list") {
+      if (isFileMetadata(value)) return value;
       if (Array.isArray(value) && value.length > 0) return value.join(", ");
       if (Array.isArray(value)) return "—";
       return String(value);
@@ -978,22 +1049,22 @@ export default function TPDocReview() {
           <div className="flex flex-col h-full">
             <div className="h-12 border-b flex items-center px-4 shrink-0">
               <div className="flex w-full gap-2">
-                <Button
+                {/* <Button
                   variant={activePanel === "data" ? "default" : "outline"}
                   size="sm"
                   className="flex-1"
                   onClick={() => setActivePanel("data")}
                 >
                   Document Data
-                </Button>
-                <Button
+                </Button> */}
+                {/* <Button
                   variant={activePanel === "assistant" ? "default" : "outline"}
                   size="sm"
                   className="flex-1"
                   onClick={() => setActivePanel("assistant")}
                 >
                   AI Assistant
-                </Button>
+                </Button> */}
               </div>
             </div>
 
@@ -1016,7 +1087,7 @@ export default function TPDocReview() {
                         </div>
                         <div className="space-y-3">
                           {section.fields.map((field) => {
-                            const value = renderValue(field);
+                            const value: unknown = renderValue(field);
                             if (field.kind === "table") {
                               const rows = Array.isArray(value) ? value : [];
                               return (
@@ -1034,7 +1105,19 @@ export default function TPDocReview() {
                                             .map(([key, val]) => (
                                               <div key={key} className="flex items-start justify-between gap-3">
                                                 <span className="text-xs text-muted-foreground">{key}</span>
-                                                <span className="text-right">{val ?? "—"}</span>
+                                                {isFileMetadata(val) ? (
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-7 px-2 text-xs"
+                                                    onClick={() => openFilePreview(val)}
+                                                  >
+                                                    View
+                                                  </Button>
+                                                ) : (
+                                                  <span className="text-right">{val ?? "—"}</span>
+                                                )}
                                               </div>
                                             ))}
                                         </div>
@@ -1049,9 +1132,54 @@ export default function TPDocReview() {
                                 <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                                   {field.label}
                                 </span>
-                                <span className="block text-sm leading-relaxed break-words whitespace-pre-wrap">
-                                  {value as string}
-                                </span>
+                                {isFileMetadata(value) ? (
+                                  (() => {
+                                    const fileMeta = value;
+                                    return (
+                                  <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                                    <p className="text-sm font-medium break-all">
+                                      {fileMeta.original_name || fileMeta.filename || "Uploaded file"}
+                                    </p>
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      <p>Size: {formatFileSize(fileMeta.size_bytes)}</p>
+                                      <p>
+                                        Uploaded:{" "}
+                                        {fileMeta.uploaded_at ? new Date(fileMeta.uploaded_at).toLocaleString() : "—"}
+                                      </p>
+                                    </div>
+                                    <Button type="button" size="sm" variant="outline" onClick={() => openFilePreview(fileMeta)}>
+                                      View
+                                    </Button>
+                                  </div>
+                                    );
+                                  })()
+                                ) : value && typeof value === "object" && !Array.isArray(value) ? (
+                                  (() => {
+                                    const obj = value as Record<string, unknown>;
+                                    const entries = Object.entries(obj);
+                                    if (entries.length === 0) {
+                                      return (
+                                        <span className="block text-sm leading-relaxed break-words whitespace-pre-wrap">
+                                          —
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <div className="space-y-1 rounded-md border bg-muted/20 p-2">
+                                        {entries.map(([k, v]) => (
+                                          <div key={k} className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+                                            <span className="font-medium">{humanizeKey(k)}:</span>{" "}
+                                            <span>{v == null ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()
+                                ) : (
+                                  <span className="block text-sm leading-relaxed break-words whitespace-pre-wrap">
+                                    {value as string}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}
@@ -1155,6 +1283,54 @@ export default function TPDocReview() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isFilePreviewOpen} onOpenChange={setIsFilePreviewOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{previewFile?.original_name || previewFile?.filename || "File Preview"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              Size: {formatFileSize(previewFile?.size_bytes)}{" "}
+              {previewFile?.uploaded_at ? `• Uploaded ${new Date(previewFile.uploaded_at).toLocaleString()}` : ""}
+            </div>
+            <div className="rounded-md border bg-muted/20 h-[60vh] overflow-hidden">
+              {previewFile && isPreviewableFile(previewFile) && getDownloadUrl(previewFile) ? (
+                String(previewFile.content_type || "").toLowerCase().startsWith("image/") ? (
+                  <div className="h-full w-full flex items-center justify-center p-4">
+                    <img
+                      src={getPreviewUrl(previewFile) ?? ""}
+                      alt={previewFile.original_name || previewFile.filename || "Preview"}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <iframe
+                    title="File preview"
+                    src={getPreviewUrl(previewFile) ?? ""}
+                    className="h-full w-full"
+                  />
+                )
+              ) : (
+                <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                  Preview not available for this file type.
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => previewFile && triggerDownload(previewFile)}
+                disabled={!previewFile}
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,6 +12,7 @@ interface DataTableProps<T> {
   data: T[];
   emptyMessage?: string;
   getRowKey: (item: T) => string;
+  getRowClassName?: (item: T) => string;
 }
 
 export function DataTable<T>({
@@ -19,6 +20,7 @@ export function DataTable<T>({
   data,
   emptyMessage = "No data available",
   getRowKey,
+  getRowClassName,
 }: DataTableProps<T>) {
   return (
     <Card className="overflow-hidden">
@@ -40,7 +42,7 @@ export function DataTable<T>({
               </tr>
             ) : (
               data.map((item) => (
-                <tr key={getRowKey(item)}>
+                <tr key={getRowKey(item)} className={getRowClassName?.(item)}>
                   {columns.map((column) => (
                     <td key={column.key}>
                       {column.render

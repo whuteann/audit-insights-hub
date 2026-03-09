@@ -4,6 +4,7 @@ import { ArrowLeft, GripVertical, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -47,6 +48,13 @@ type MergeCellRule = {
   col_end: string;
 };
 
+type TotalRule = {
+  label: string;
+  column_index: number;
+  sum_column_index: number;
+  enabled?: boolean;
+};
+
 type ArrayFieldOption = {
   key: string;
   token: string;
@@ -79,6 +87,30 @@ const ARRAY_SOURCE_FIELD_MAP: Record<string, ArrayFieldOption[]> = {
     { key: "company", token: "[COMPANY]", label: "Company", source_path: "$row.company" },
     { key: "country", token: "[COUNTRY]", label: "Country", source_path: "$row.country" },
   ],
+  key_competitors: [
+    { key: "competitor", token: "[COMPETITOR]", label: "Competitor", source_path: "$row.competitor" },
+    { key: "coRegNo", token: "[CO_REG_NO]", label: "Co. reg. no.", source_path: "$row.coRegNo" },
+    {
+      key: "financialYearEnded",
+      token: "[FINANCIAL_YEAR_ENDED]",
+      label: "Financial year ended",
+      source_path: "$row.financialYearEnded",
+    },
+    {
+      key: "principalActivity",
+      token: "[PRINCIPAL_ACTIVITY]",
+      label: "Principal activity",
+      source_path: "$row.principalActivity",
+    },
+    { key: "country", token: "[COUNTRY]", label: "Country", source_path: "$row.country" },
+    {
+      key: "acceptedRejected",
+      token: "[ACCEPTED_REJECTED]",
+      label: "Accepted / Rejected",
+      source_path: "$row.acceptedRejected",
+    },
+    { key: "reasons", token: "[REASONS]", label: "Reasons", source_path: "$row.reasons" },
+  ],
   customers: [
     { key: "customerName", token: "[CUSTOMER_NAME]", label: "Customer name", source_path: "$row.customerName" },
     { key: "projectName", token: "[PROJECT_NAME]", label: "Project name", source_path: "$row.projectName" },
@@ -87,10 +119,21 @@ const ARRAY_SOURCE_FIELD_MAP: Record<string, ArrayFieldOption[]> = {
     { key: "revenueAmount", token: "[REVENUE_AMOUNT]", label: "Revenue amount", source_path: "$row.revenueAmount" },
   ],
   suppliers: [
-    { key: "supplierName", token: "[SUPPLIER_NAME]", label: "Supplier name", source_path: "$row.supplierName" },
-    { key: "productService", token: "[PRODUCT_SERVICE]", label: "Product/service", source_path: "$row.productService" },
-    { key: "country", token: "[COUNTRY]", label: "Country", source_path: "$row.country" },
-    { key: "amount", token: "[AMOUNT]", label: "Amount", source_path: "$row.amount" },
+    {
+      key: "thirdPartySuppliers",
+      token: "[THIRD_PARTY_SUPPLIERS]",
+      label: "Third Party Suppliers",
+      source_path: "$row.thirdPartySuppliers",
+    },
+    {
+      key: "servicesDescription",
+      token: "[SERVICES_DESCRIPTION]",
+      label: "Services Decription",
+      source_path: "$row.servicesDescription",
+    },
+    { key: "currency", token: "[CURRENCY]", label: "Currency", source_path: "$row.currency" },
+    { key: "creditTerm", token: "[CREDIT_TERM]", label: "Credit Term", source_path: "$row.creditTerm" },
+    { key: "amountRm", token: "[AMOUNT_RM]", label: "Amount (RM)", source_path: "$row.amountRm" },
   ],
   services_provided: [
     { key: "projectType", token: "[PROJECT_TYPE]", label: "Project type", source_path: "$row.projectType" },
@@ -128,7 +171,7 @@ type AssemblyStep = {
     template_group_id?: string;
     array_source?: string;
     columns?: Array<{ header: string; source_path: string; value_template?: string }>;
-    totals?: Array<{ label: string; column_index: number; sum_column_index: number }>;
+    totals?: TotalRule[];
     merge_cells?: Array<{ row_start: number; row_end: number; col_start: number; col_end: number }>;
   };
 };
@@ -166,22 +209,32 @@ export default function AssemblySectionEdit() {
     if (!id) return;
     fetch(`${apiBase}/templates/section-rules/${id}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => setRule(data ?? null))
+      .then((data) => {
+        console.log("[AssemblySectionEdit] section-rule response:", data);
+        setRule(data ?? null);
+      })
       .catch((err) => console.error("Failed to load section rule", err));
 
     fetch(`${apiBase}/templates`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => setTemplates(Array.isArray(data) ? data : []))
+      .then((data) => {
+        console.log("[AssemblySectionEdit] templates response:", data);
+        setTemplates(Array.isArray(data) ? data : []);
+      })
       .catch((err) => console.error("Failed to load templates", err));
 
     fetch(`${apiBase}/templates/industry-analysis/groups`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => setTemplateGroups(Array.isArray(data) ? data : []))
+      .then((data) => {
+        console.log("[AssemblySectionEdit] template-groups response:", data);
+        setTemplateGroups(Array.isArray(data) ? data : []);
+      })
       .catch((err) => console.error("Failed to load template groups", err));
 
     fetch(`${apiBase}/draft-documents/assembly/sections/${id}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
+        console.log("[AssemblySectionEdit] assembly-steps response:", data);
         const loaded = Array.isArray(data?.steps) ? data.steps : [];
         const mappedSteps = loaded.map((step: any) => ({
             id: String(step.id ?? uid()),
@@ -194,7 +247,17 @@ export default function AssemblySectionEdit() {
                   : "template_section",
             template_id: step.template_id ?? null,
             is_enabled: step.is_enabled !== false,
-            params_json: step.params_json ?? {},
+            params_json: {
+              ...(step.params_json ?? {}),
+              totals: Array.isArray(step?.params_json?.totals)
+                ? step.params_json.totals.map((total: any) => ({
+                    label: String(total?.label ?? "Total"),
+                    column_index: Number(total?.column_index ?? 0),
+                    sum_column_index: Number(total?.sum_column_index ?? 0),
+                    enabled: total?.enabled !== false,
+                  }))
+                : [],
+            },
           }));
         setSteps(mappedSteps);
       })
@@ -229,7 +292,9 @@ export default function AssemblySectionEdit() {
 
   const fieldOptionsForSource = (arraySource: string) => ARRAY_SOURCE_FIELD_MAP[arraySource] ?? [];
   const arraySourceOptions = useMemo(
-    () => DOCUMENT_SOURCE_PATH_GROUPS.find((group) => group.label.includes("Arrays"))?.options ?? [],
+    () =>
+      DOCUMENT_SOURCE_PATH_GROUPS.find((group) => group.label === "Arrays (map in tables)")?.options ??
+      [],
     []
   );
 
@@ -311,6 +376,7 @@ export default function AssemblySectionEdit() {
           params_json: step.params_json,
         })),
       };
+      console.log("[AssemblySectionEdit] save payload:", payload);
 
       const res = await fetch(`${apiBase}/draft-documents/assembly/sections/${id}`, {
         method: "PUT",
@@ -318,6 +384,8 @@ export default function AssemblySectionEdit() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to save section assembly steps");
+      const saveResponse = await res.json();
+      console.log("[AssemblySectionEdit] save response:", saveResponse);
       toast({ title: "Saved", description: "Section assembly logic updated." });
     } catch (err) {
       console.error(err);
@@ -618,7 +686,7 @@ export default function AssemblySectionEdit() {
                             </SelectGroup>
                           </SelectContent>
                         </Select>
-                        <Input
+                        {/* <Input
                           value={column.value_template ?? ""}
                           onChange={(e) =>
                             upsertStepById(step.id, (entry) => ({
@@ -632,7 +700,7 @@ export default function AssemblySectionEdit() {
                             }))
                           }
                           placeholder="Cell template (optional), e.g. [ENTITY_NAME] - [COUNTRY]"
-                        />
+                        /> */}
                         <div className="flex justify-end">
                           <Button
                             type="button"
@@ -656,10 +724,49 @@ export default function AssemblySectionEdit() {
                   </div>
 
                   <div className="grid gap-2 rounded-md border p-3 md:grid-cols-3">
+                    <div className="md:col-span-3 flex items-center gap-2">
+                      {(() => {
+                        const hasTotalConfig = (step.params_json.totals?.length ?? 0) > 0;
+                        const isTotalEnabled = hasTotalConfig && step.params_json.totals?.[0]?.enabled !== false;
+                        return (
+                          <>
+                      <Checkbox
+                        checked={isTotalEnabled}
+                        onCheckedChange={(checked) =>
+                          setSteps((prev) =>
+                            prev.map((entry) =>
+                              entry.id === step.id
+                                ? {
+                                    ...entry,
+                                    params_json: {
+                                      ...entry.params_json,
+                                      totals: checked
+                                        ? [
+                                            {
+                                              label: String(entry.params_json.totals?.[0]?.label ?? "Total"),
+                                              column_index: Number(entry.params_json.totals?.[0]?.column_index ?? 0),
+                                              sum_column_index: Number(entry.params_json.totals?.[0]?.sum_column_index ?? 0),
+                                              enabled: true,
+                                            },
+                                          ]
+                                        : [],
+                                    },
+                                  }
+                                : entry
+                            )
+                          )
+                        }
+                      />
+                      <Label className="text-sm">Render total row</Label>
+                          </>
+                        );
+                      })()}
+                    </div>
                     <div className="space-y-2">
                       <Label>Total label</Label>
                       <Input
                         value={String(step.params_json.totals?.[0]?.label ?? "Total")}
+                        disabled={(step.params_json.totals?.length ?? 0) === 0 || step.params_json.totals?.[0]?.enabled === false}
                         onChange={(e) =>
                           setSteps((prev) =>
                             prev.map((entry) =>
@@ -673,6 +780,7 @@ export default function AssemblySectionEdit() {
                                           label: e.target.value,
                                           column_index: Number(entry.params_json.totals?.[0]?.column_index ?? 0),
                                           sum_column_index: Number(entry.params_json.totals?.[0]?.sum_column_index ?? 0),
+                                          enabled: entry.params_json.totals?.[0]?.enabled !== false,
                                         },
                                       ],
                                     },
@@ -687,6 +795,7 @@ export default function AssemblySectionEdit() {
                       <Label>Label column index</Label>
                       <Select
                         value={String(step.params_json.totals?.[0]?.column_index ?? 0)}
+                        disabled={(step.params_json.totals?.length ?? 0) === 0 || step.params_json.totals?.[0]?.enabled === false}
                         onValueChange={(value) =>
                           setSteps((prev) =>
                             prev.map((entry) =>
@@ -700,6 +809,7 @@ export default function AssemblySectionEdit() {
                                           label: String(entry.params_json.totals?.[0]?.label ?? "Total"),
                                           column_index: Number(value || 0),
                                           sum_column_index: Number(entry.params_json.totals?.[0]?.sum_column_index ?? 0),
+                                          enabled: entry.params_json.totals?.[0]?.enabled !== false,
                                         },
                                       ],
                                     },
@@ -725,6 +835,7 @@ export default function AssemblySectionEdit() {
                       <Label>Sum column index</Label>
                       <Select
                         value={String(step.params_json.totals?.[0]?.sum_column_index ?? 0)}
+                        disabled={(step.params_json.totals?.length ?? 0) === 0 || step.params_json.totals?.[0]?.enabled === false}
                         onValueChange={(value) =>
                           setSteps((prev) =>
                             prev.map((entry) =>
@@ -738,6 +849,7 @@ export default function AssemblySectionEdit() {
                                           label: String(entry.params_json.totals?.[0]?.label ?? "Total"),
                                           column_index: Number(entry.params_json.totals?.[0]?.column_index ?? 0),
                                           sum_column_index: Number(value || 0),
+                                          enabled: entry.params_json.totals?.[0]?.enabled !== false,
                                         },
                                       ],
                                     },

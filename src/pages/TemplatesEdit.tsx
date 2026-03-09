@@ -50,7 +50,10 @@ type EditableBlock = {
   type: BlockType;
   textByType: Record<TextBlockType, string>;
   bulletItems: string[];
-  tableValue: string;
+  tableData: {
+    columns: string[];
+    rows: string[][];
+  };
   shade: string;
   minimized: boolean;
 };
@@ -64,6 +67,7 @@ type TemplatePlaceholder = {
 const BLOCK_TYPES: BlockType[] = [
   "paragraph",
   "bullet_list",
+  "table",
   "appendix_ref",
   "subheading",
 ];
@@ -94,7 +98,7 @@ function toEditableBlocks(content: any[]): EditableBlock[] {
           subheading: "",
         },
         bulletItems: [],
-        tableValue: '{\n  "columns": [],\n  "rows": []\n}',
+        tableData: { columns: [], rows: [] },
         shade: shadeForIndex(0),
         minimized: false,
       },
@@ -121,10 +125,14 @@ function toEditableBlocks(content: any[]): EditableBlock[] {
     const bulletItems = Array.isArray(block?.items)
       ? block.items.map((item: unknown) => String(item))
       : [];
-    const tableValue =
-      type === "table"
-        ? JSON.stringify({ columns: block?.columns ?? [], rows: block?.rows ?? [] }, null, 2)
-        : '{\n  "columns": [],\n  "rows": []\n}';
+    const tableData = {
+      columns: Array.isArray(block?.columns) ? block.columns.map((col: unknown) => String(col ?? "")) : [],
+      rows: Array.isArray(block?.rows)
+        ? block.rows.map((row: unknown) =>
+            Array.isArray(row) ? row.map((cell: unknown) => String(cell ?? "")) : []
+          )
+        : [],
+    };
 
     return {
       id: `${Date.now()}_${index}`,
@@ -132,7 +140,7 @@ function toEditableBlocks(content: any[]): EditableBlock[] {
       type,
       textByType,
       bulletItems,
-      tableValue,
+      tableData,
       shade: shadeForIndex(index),
       minimized: false,
     };
@@ -160,6 +168,7 @@ export default function TemplatesEdit() {
     fetch(`${apiBase}/templates/${id}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
+        console.log("[TemplatesEdit] template response:", data);
         setTemplate(data);
         setDraftName(data.name ?? "");
         setBlocks(rebalanceBlockShades(toEditableBlocks(data.content ?? [])));
@@ -167,6 +176,10 @@ export default function TemplatesEdit() {
         return fetch(`${apiBase}/templates/${id}/placeholders`)
           .then((res) => (res.ok ? res.json() : []))
           .then((placeholderRows) => {
+            console.log("[TemplatesEdit] Placeholder mapping queried values:", {
+              templateId: id,
+              placeholders: placeholderRows,
+            });
             setPlaceholders(Array.isArray(placeholderRows) ? placeholderRows : []);
           });
       })
@@ -199,18 +212,11 @@ export default function TemplatesEdit() {
           continue;
         }
         if (block.type === "table") {
-          let tablePayload: any = null;
-          try {
-            tablePayload = JSON.parse(block.tableValue || "{}");
-          } catch {
-            setError("Invalid table JSON block. Use {\"columns\": [], \"rows\": []} format.");
-            return;
-          }
           parsed.push({
             name: block.name.trim(),
             type: "table",
-            columns: Array.isArray(tablePayload.columns) ? tablePayload.columns : [],
-            rows: Array.isArray(tablePayload.rows) ? tablePayload.rows : [],
+            columns: block.tableData.columns,
+            rows: block.tableData.rows,
           });
           continue;
         }
@@ -236,6 +242,11 @@ export default function TemplatesEdit() {
         }),
       });
       if (!res.ok) throw new Error("Failed to save template");
+      console.log("[TemplatesEdit] save template payload:", {
+        id: template.id,
+        name: draftName.trim() || template.name,
+        content: parsed,
+      });
       const normalizedPlaceholders = placeholders
         .map((item) => ({
           placeholder_key: item.placeholder_key.trim().toUpperCase(),
@@ -253,6 +264,10 @@ export default function TemplatesEdit() {
       });
       if (!placeholdersRes.ok) throw new Error("Failed to save placeholders");
       const updated = await res.json();
+      console.log("[TemplatesEdit] save template response:", updated);
+      const placeholderSaveResponse = await placeholdersRes.json();
+      console.log("[TemplatesEdit] save placeholders payload:", normalizedPlaceholders);
+      console.log("[TemplatesEdit] save placeholders response:", placeholderSaveResponse);
       setTemplate((prev) => (prev ? { ...prev, ...updated } : prev));
       setBlocks((prev) => rebalanceBlockShades(prev));
       setIsEditingTitle(false);
@@ -307,7 +322,7 @@ export default function TemplatesEdit() {
           subheading: "",
         },
         bulletItems: [],
-        tableValue: '{\n  "columns": [],\n  "rows": []\n}',
+        tableData: { columns: [], rows: [] },
         shade: nextShade,
         minimized: false,
       },
@@ -594,7 +609,13 @@ export default function TemplatesEdit() {
                           </Select>
                         </div>
                         <div className="grid gap-2">
-                          <Label>{block.type === "bullet_list" ? "Items" : "Content"}</Label>
+                          <Label>
+                            {block.type === "bullet_list"
+                              ? "Items"
+                              : block.type === "table"
+                                ? "Table"
+                                : "Content"}
+                          </Label>
                           {block.type === "bullet_list" ? (
                             <div className="space-y-2">
                               {block.bulletItems.length === 0 ? (
@@ -660,20 +681,191 @@ export default function TemplatesEdit() {
                                 Add item
                               </Button>
                             </div>
+                          ) : block.type === "table" ? (
+                            <div className="space-y-3 rounded-md border p-3">
+                              <div className="grid gap-2 md:grid-cols-[180px_1fr] md:items-center">
+                                <Label>Number of columns</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={block.tableData.columns.length}
+                                  onChange={(e) => {
+                                    const nextCount = Math.max(0, Number(e.target.value || 0));
+                                    setBlocks((prev) =>
+                                      prev.map((item) => {
+                                        if (item.id !== block.id) return item;
+                                        const currentColumns = item.tableData.columns;
+                                        const currentRows = item.tableData.rows;
+                                        const nextColumns =
+                                          nextCount > currentColumns.length
+                                            ? [
+                                                ...currentColumns,
+                                                ...Array.from(
+                                                  { length: nextCount - currentColumns.length },
+                                                  (_, idx) => `Column ${currentColumns.length + idx + 1}`
+                                                ),
+                                              ]
+                                            : currentColumns.slice(0, nextCount);
+                                        const nextRows = currentRows.map((row) =>
+                                          nextCount > row.length
+                                            ? [...row, ...Array.from({ length: nextCount - row.length }, () => "")]
+                                            : row.slice(0, nextCount)
+                                        );
+                                        return {
+                                          ...item,
+                                          tableData: {
+                                            columns: nextColumns,
+                                            rows: nextRows,
+                                          },
+                                        };
+                                      })
+                                    );
+                                  }}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>Column headers</Label>
+                                {(block.tableData.columns ?? []).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">No columns configured.</p>
+                                ) : (
+                                  <div className="grid gap-2">
+                                    {block.tableData.columns.map((column, columnIndex) => (
+                                      <Input
+                                        key={`${block.id}_column_${columnIndex}`}
+                                        value={column}
+                                        placeholder={`Column ${columnIndex + 1}`}
+                                        onChange={(e) =>
+                                          setBlocks((prev) =>
+                                            prev.map((item) =>
+                                              item.id === block.id
+                                                ? {
+                                                    ...item,
+                                                    tableData: {
+                                                      ...item.tableData,
+                                                      columns: item.tableData.columns.map((entry, idx) =>
+                                                        idx === columnIndex ? e.target.value : entry
+                                                      ),
+                                                    },
+                                                  }
+                                                : item
+                                            )
+                                          )
+                                        }
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label>Rows</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setBlocks((prev) =>
+                                        prev.map((item) =>
+                                          item.id === block.id
+                                            ? {
+                                                ...item,
+                                                tableData: {
+                                                  ...item.tableData,
+                                                  rows: [
+                                                    ...item.tableData.rows,
+                                                    Array.from({ length: item.tableData.columns.length }, () => ""),
+                                                  ],
+                                                },
+                                              }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Add row
+                                  </Button>
+                                </div>
+                                {(block.tableData.rows ?? []).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">No rows yet.</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {block.tableData.rows.map((row, rowIndex) => (
+                                      <div
+                                        key={`${block.id}_row_${rowIndex}`}
+                                        className="rounded-md border p-2 space-y-2"
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <p className="text-xs text-muted-foreground">Row {rowIndex + 1}</p>
+                                          <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="outline"
+                                            onClick={() =>
+                                              setBlocks((prev) =>
+                                                prev.map((item) =>
+                                                  item.id === block.id
+                                                    ? {
+                                                        ...item,
+                                                        tableData: {
+                                                          ...item.tableData,
+                                                          rows: item.tableData.rows.filter((_, idx) => idx !== rowIndex),
+                                                        },
+                                                      }
+                                                    : item
+                                                )
+                                              )
+                                            }
+                                            aria-label="Remove row"
+                                          >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                          </Button>
+                                        </div>
+                                        <div className="grid gap-2">
+                                          {block.tableData.columns.map((column, columnIndex) => (
+                                            <Input
+                                              key={`${block.id}_row_${rowIndex}_cell_${columnIndex}`}
+                                              value={row[columnIndex] ?? ""}
+                                              placeholder={column || `Column ${columnIndex + 1}`}
+                                              onChange={(e) =>
+                                                setBlocks((prev) =>
+                                                  prev.map((item) =>
+                                                    item.id === block.id
+                                                      ? {
+                                                          ...item,
+                                                          tableData: {
+                                                            ...item.tableData,
+                                                            rows: item.tableData.rows.map((entryRow, idx) =>
+                                                              idx === rowIndex
+                                                                ? entryRow.map((cell, cellIdx) =>
+                                                                    cellIdx === columnIndex ? e.target.value : cell
+                                                                  )
+                                                                : entryRow
+                                                            ),
+                                                          },
+                                                        }
+                                                      : item
+                                                  )
+                                                )
+                                              }
+                                            />
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           ) : (
                             <Textarea
-                              value={
-                                block.type === "table"
-                                  ? block.tableValue
-                                  : block.textByType[block.type as TextBlockType] ?? ""
-                              }
+                              value={block.textByType[block.type as TextBlockType] ?? ""}
                               onChange={(e) =>
                                 setBlocks((prev) =>
                                   prev.map((item) => {
                                     if (item.id !== block.id) return item;
-                                    if (block.type === "table") {
-                                      return { ...item, tableValue: e.target.value };
-                                    }
                                     return {
                                       ...item,
                                       textByType: {
@@ -684,12 +876,8 @@ export default function TemplatesEdit() {
                                   })
                                 )
                               }
-                              className="font-mono text-xs min-h-[140px]"
-                              placeholder={
-                                block.type === "table"
-                                  ? '{\"columns\": [\"\"], \"rows\": [[\"\"]]}'
-                                  : "Enter text"
-                              }
+                              className="min-h-[140px]"
+                              placeholder="Enter text"
                             />
                           )}
                         </div>

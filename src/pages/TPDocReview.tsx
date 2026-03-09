@@ -65,6 +65,12 @@ type DocumentHeader = {
   updated_at: string | null;
 };
 
+type IndustryTemplateGroup = {
+  id: string;
+  name: string;
+  templates: Array<{ id: string; name: string; sort_order?: number | null }>;
+};
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -92,6 +98,9 @@ export default function TPDocReview() {
   const [isExporting, setIsExporting] = useState(false);
   const [isSavingSection, setIsSavingSection] = useState(false);
   const [dataSearch, setDataSearch] = useState("");
+  const [industryGroups, setIndustryGroups] = useState<IndustryTemplateGroup[]>([]);
+  const [selectedIndustryGroupId, setSelectedIndustryGroupId] = useState<string>("");
+  const [isApplyingIndustryGroup, setIsApplyingIndustryGroup] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [activePanel, setActivePanel] = useState<"data" | "assistant">("data");
@@ -199,6 +208,91 @@ export default function TPDocReview() {
       })
       .join("") || "<p></p>";
 
+  const escapeHtml = (value: unknown) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const templateBlocksToHtml = (blocks: any[]) =>
+    (blocks || [])
+      .map((block) => {
+        if (!block || typeof block !== "object") return "";
+        if (block.type === "paragraph") {
+          return `<p>${escapeHtml(block.content ?? "")}</p>`;
+        }
+        if (block.type === "bullet_list") {
+          const items = Array.isArray(block.items) ? block.items : [];
+          const li = items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+          return `<ul>${li}</ul>`;
+        }
+        if (block.type === "table") {
+          const columns = Array.isArray(block.columns) ? block.columns : [];
+          const rows = Array.isArray(block.rows) ? block.rows : [];
+          const thead = columns.length
+            ? `<thead><tr>${columns.map((col: unknown) => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>`
+            : "";
+          const tbody = `<tbody>${rows
+            .map((row: unknown) => {
+              const cells = Array.isArray(row) ? row : [];
+              return `<tr>${cells.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`;
+            })
+            .join("")}</tbody>`;
+          return `<table>${thead}${tbody}</table>`;
+        }
+        return "";
+      })
+      .join("");
+
+  const applyIndustryGroupToEditor = async (groupId: string) => {
+    if (!groupId || !editor) return;
+    setIsApplyingIndustryGroup(true);
+    try {
+      const group = industryGroups.find((g) => g.id === groupId);
+      if (!group || !Array.isArray(group.templates) || group.templates.length === 0) {
+        editor.commands.setContent("<p></p>");
+        lastEditorHtmlRef.current = "<p></p>";
+        return;
+      }
+
+      const templatePayloads = await Promise.all(
+        group.templates.map(async (tpl) => {
+          const res = await fetch(`${apiBase}/templates/${encodeURIComponent(tpl.id)}`);
+          if (!res.ok) throw new Error(`Failed to load template: ${tpl.name}`);
+          return res.json();
+        })
+      );
+
+      const html = templatePayloads
+        .map((tpl) => {
+          const heading = `<h2>${escapeHtml(tpl?.name || "Untitled Template")}</h2>`;
+          const body = templateBlocksToHtml(Array.isArray(tpl?.content) ? tpl.content : []);
+          return `<section>${heading}${body || "<p></p>"}</section>`;
+        })
+        .join("");
+
+      const finalHtml = html || "<p></p>";
+      editor.commands.setContent(finalHtml);
+      lastEditorHtmlRef.current = finalHtml;
+      setSelectedIndustryGroupId(groupId);
+      toast({
+        title: "Industry group applied",
+        description: `Loaded ${group.templates.length} template(s) into the canvas.`,
+      });
+    } catch (err) {
+      console.error("Failed to apply industry template group", err);
+      toast({
+        title: "Failed to apply group",
+        description: "Unable to load templates for the selected group.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplyingIndustryGroup(false);
+    }
+  };
+
   const editorHtml = useMemo(() => sectionsToHtml(sectionsForRender), [sectionsForRender]);
   const lastEditorHtmlRef = useRef<string | null>(null);
 
@@ -219,6 +313,18 @@ export default function TPDocReview() {
         console.error("Failed to load document header", err);
       });
   }, [apiBase, docId]);
+
+  useEffect(() => {
+    fetch(`${apiBase}/templates/industry-analysis/groups`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        setIndustryGroups(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error("Failed to load industry template groups", err);
+        setIndustryGroups([]);
+      });
+  }, [apiBase]);
 
   // Load draft sections for selected section
   useEffect(() => {
@@ -343,6 +449,18 @@ export default function TPDocReview() {
     nextParams.set("section", section);
     if (selectedVersion) nextParams.set("version", selectedVersion);
     setSearchParams(nextParams);
+  };
+
+  const handleIndustryGroupChange = async (groupId: string) => {
+    if (!editor) return;
+    const hasUnsavedChanges = editor.getHTML() !== (lastEditorHtmlRef.current ?? "<p></p>");
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(
+        "Switching Industry Analysis template group will replace current unsaved canvas content. Continue?"
+      );
+      if (!confirmed) return;
+    }
+    await applyIndustryGroupToEditor(groupId);
   };
 
   const handleVersionChange = (version: string) => {
@@ -730,6 +848,9 @@ export default function TPDocReview() {
       if (Array.isArray(value)) return value;
       return [];
     }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value;
+    }
     return String(value);
   };
 
@@ -1067,6 +1188,33 @@ export default function TPDocReview() {
                 </Button>
               </div>
             </div> */}
+
+            {/* Put the dropdown right here */}
+            {selectedSection === "3" ? (
+              <div className="px-4 pt-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="industry-group-select" className="text-sm font-medium shrink-0">
+                    Select Template:
+                  </Label>
+                  <Select
+                    value={selectedIndustryGroupId}
+                    onValueChange={handleIndustryGroupChange}
+                    disabled={isApplyingIndustryGroup || industryGroups.length === 0}
+                  >
+                    <SelectTrigger id="industry-group-select" className="w-full">
+                      <SelectValue placeholder="Select template group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {industryGroups.map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : null}
 
             {activePanel === "data" ? (
               <div className="flex-1 flex flex-col overflow-hidden">

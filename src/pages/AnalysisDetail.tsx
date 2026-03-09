@@ -14,6 +14,7 @@ type AnalysisCompanyRow = {
   row_number: number;
   similarity_score: number | null;
   verdict: string;
+  user_verdict: "ACCEPTED" | "POTENTIAL" | "REJECTED" | null;
   reason: string;
   company: {
     id: string;
@@ -43,20 +44,27 @@ type AnalysisDetail = {
   company_results: AnalysisCompanyRow[];
 };
 
+const normalizeAnalysis = (analysis: AnalysisDetail): AnalysisDetail => ({
+  ...analysis,
+  company_results: [...(analysis.company_results || [])].sort((a, b) => a.row_number - b.row_number),
+});
+
 export default function AnalysisDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [verdictFilter, setVerdictFilter] = useState("ALL");
+  const [userVerdictFilter, setUserVerdictFilter] = useState("ALL");
+  const [computedVerdictFilter, setComputedVerdictFilter] = useState("ALL");
+  const [updatingRowId, setUpdatingRowId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     setIsLoading(true);
     fetch(`${apiBase}/benchmark/analyses/${id}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => setAnalysis(data))
+      .then((data) => setAnalysis(normalizeAnalysis(data)))
       .catch((err) => {
         console.error("Failed to load analysis", err);
         toast({
@@ -70,9 +78,14 @@ export default function AnalysisDetail() {
 
   const filteredResults = useMemo(() => {
     if (!analysis) return [];
-    if (verdictFilter === "ALL") return analysis.company_results || [];
-    return (analysis.company_results || []).filter((row) => row.verdict === verdictFilter);
-  }, [analysis, verdictFilter]);
+    return (analysis.company_results || []).filter((row) => {
+      const userVerdictMatch =
+        userVerdictFilter === "ALL" ? true : row.user_verdict === userVerdictFilter;
+      const computedVerdictMatch =
+        computedVerdictFilter === "ALL" ? true : row.verdict === computedVerdictFilter;
+      return userVerdictMatch && computedVerdictMatch;
+    });
+  }, [analysis, userVerdictFilter, computedVerdictFilter]);
 
   const statusBadgeClass = useMemo(() => {
     const status = (analysis?.status || "").toLowerCase();
@@ -85,7 +98,10 @@ export default function AnalysisDetail() {
   const handleDownload = async () => {
     if (!id) return;
     try {
-      const verdictQuery = verdictFilter !== "ALL" ? `?verdict=${encodeURIComponent(verdictFilter.toLowerCase())}` : "";
+      const verdictQuery =
+        userVerdictFilter !== "ALL"
+          ? `?verdict=${encodeURIComponent(userVerdictFilter.toLowerCase())}`
+          : "";
       const res = await fetch(`${apiBase}/benchmark/analyses/${id}/download${verdictQuery}`);
       if (!res.ok) throw new Error("Failed to download results");
       const blob = await res.blob();
@@ -107,6 +123,31 @@ export default function AnalysisDetail() {
         description: "Unable to download analysis file.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleUserVerdictChange = async (row: AnalysisCompanyRow, value: string) => {
+    if (!id) return;
+    setUpdatingRowId(row.id);
+    const payload = { user_verdict: value === "EMPTY" ? null : value };
+    try {
+      const res = await fetch(`${apiBase}/benchmark/analyses/${id}/companies/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to update verdict");
+      const updatedAnalysis = (await res.json()) as AnalysisDetail;
+      setAnalysis(normalizeAnalysis(updatedAnalysis));
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Update failed",
+        description: "Unable to update verdict.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingRowId(null);
     }
   };
 
@@ -139,8 +180,37 @@ export default function AnalysisDetail() {
       header: "Similarity",
       render: (row: AnalysisCompanyRow) => (row.similarity_score == null ? "—" : row.similarity_score.toFixed(4)),
     },
-    { key: "verdict", header: "Verdict" },
-    { key: "reason", header: "Reason" },
+    { key: "verdict", header: "Computed Verdict" },
+    {
+      key: "user_verdict",
+      header: "Verdict",
+      render: (row: AnalysisCompanyRow) => (
+        <Select
+          value={row.user_verdict ?? "EMPTY"}
+          onValueChange={(value) => void handleUserVerdictChange(row, value)}
+          disabled={updatingRowId === row.id}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Select verdict" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="EMPTY">—</SelectItem>
+            <SelectItem value="ACCEPTED">Accepted</SelectItem>
+            <SelectItem value="POTENTIAL">Potential</SelectItem>
+            <SelectItem value="REJECTED">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+      ),
+    },
+    {
+      key: "reason",
+      header: "Reason",
+      render: (row: AnalysisCompanyRow) => (
+        <div className="min-w-[500px] whitespace-normal break-words leading-relaxed">
+          {row.reason || "—"}
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -240,9 +310,21 @@ export default function AnalysisDetail() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Company Results</CardTitle>
               <div className="flex items-center gap-2">
-                <Label htmlFor="verdict-filter">Verdict</Label>
-                <Select value={verdictFilter} onValueChange={setVerdictFilter}>
-                  <SelectTrigger id="verdict-filter" className="w-40">
+                <Label htmlFor="user-verdict-filter">Filter Verdict</Label>
+                <Select value={userVerdictFilter} onValueChange={setUserVerdictFilter}>
+                  <SelectTrigger id="user-verdict-filter" className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All</SelectItem>
+                    <SelectItem value="ACCEPTED">Accepted</SelectItem>
+                    <SelectItem value="POTENTIAL">Potential</SelectItem>
+                    <SelectItem value="REJECTED">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Label htmlFor="computed-verdict-filter">Filter Computed Verdict</Label>
+                <Select value={computedVerdictFilter} onValueChange={setComputedVerdictFilter}>
+                  <SelectTrigger id="computed-verdict-filter" className="w-52">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -255,12 +337,22 @@ export default function AnalysisDetail() {
               </div>
             </CardHeader>
             <CardContent>
-              <DataTable
-                columns={columns}
-                data={filteredResults}
-                getRowKey={(row) => row.id}
-                emptyMessage="No results for selected verdict."
-              />
+              <div className="overflow-x-auto">
+                <div className="min-w-[1100px]">
+                  <DataTable
+                    columns={columns}
+                    data={filteredResults}
+                    getRowKey={(row) => row.id}
+                    getRowClassName={(row) => {
+                      if (row.user_verdict === "ACCEPTED") return "bg-green-100";
+                      if (row.user_verdict === "POTENTIAL") return "bg-orange-100";
+                      if (row.user_verdict === "REJECTED") return "bg-red-100";
+                      return "";
+                    }}
+                    emptyMessage="No results for selected verdict."
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </>

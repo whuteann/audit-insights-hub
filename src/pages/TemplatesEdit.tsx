@@ -9,6 +9,7 @@ import {
   Maximize2,
   Pencil,
   Plus,
+  Copy,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,15 @@ function shadeForIndex(index: number): string {
 
 function rebalanceBlockShades(blocks: EditableBlock[]): EditableBlock[] {
   return blocks.map((block, index) => ({ ...block, shade: shadeForIndex(index) }));
+}
+
+function sanitizePlaceholderInner(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9_]/g, "");
+}
+
+function normalizePlaceholderKeyInput(value: string): string {
+  const inner = sanitizePlaceholderInner(value.replace(/[\[\]]/g, ""));
+  return `[${inner}]`;
 }
 
 function toEditableBlocks(content: any[]): EditableBlock[] {
@@ -425,19 +435,41 @@ export default function TemplatesEdit() {
               ) : null}
               {placeholders.map((placeholder) => (
                 <div key={placeholder.id} className="grid gap-2 rounded-md border p-3 md:grid-cols-[220px_1fr_auto]">
-                  <Input
-                    value={placeholder.placeholder_key}
-                    onChange={(e) =>
-                      setPlaceholders((prev) =>
-                        prev.map((entry) =>
-                          entry.id === placeholder.id
-                            ? { ...entry, placeholder_key: e.target.value.toUpperCase() }
-                            : entry
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={normalizePlaceholderKeyInput(placeholder.placeholder_key)}
+                      onChange={(e) =>
+                        setPlaceholders((prev) =>
+                          prev.map((entry) =>
+                            entry.id === placeholder.id
+                              ? { ...entry, placeholder_key: normalizePlaceholderKeyInput(e.target.value) }
+                              : entry
+                          )
                         )
-                      )
-                    }
-                    placeholder="[COMPANY_NAME]"
-                  />
+                      }
+                      placeholder="[COMPANY_NAME]"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={async () => {
+                        const key = normalizePlaceholderKeyInput(placeholder.placeholder_key);
+                        try {
+                          await navigator.clipboard.writeText(key);
+                          toast({ title: "Copied", description: `${key} copied to clipboard.` });
+                        } catch {
+                          toast({
+                            title: "Copy failed",
+                            description: "Unable to copy placeholder key.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <Select
                     value={placeholder.source_path}
                     onValueChange={(value) =>

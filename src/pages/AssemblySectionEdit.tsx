@@ -204,6 +204,7 @@ export default function AssemblySectionEdit() {
   const [newColumnSourceByStep, setNewColumnSourceByStep] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -395,6 +396,31 @@ export default function AssemblySectionEdit() {
     }
   };
 
+  const createTemplateAndEdit = async () => {
+    const fallbackName = rule?.section_id ? `${rule.section_id} New Template` : "New Template";
+    try {
+      setIsCreatingTemplate(true);
+      const res = await fetch(`${apiBase}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fallbackName }),
+      });
+      if (!res.ok) throw new Error("Failed to create template");
+      const created = await res.json();
+      if (!created?.id) throw new Error("Template id missing");
+      navigate(`/templates/edit/${created.id}`);
+    } catch (err) {
+      console.error("Failed to create template", err);
+      toast({
+        title: "Create failed",
+        description: "Unable to create template.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingTemplate(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -412,24 +438,35 @@ export default function AssemblySectionEdit() {
         <CardHeader>
           <CardTitle>Add Step</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {rule?.section === "3" ? (
-            <Button type="button" variant="outline" onClick={addGroupStep}>
-              <Plus className="mr-2 h-4 w-4" />
-              Link Group
-            </Button>
-          ) : (
-            <>
-              <Button type="button" variant="outline" onClick={addTemplateStep}>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {rule?.section === "3" ? (
+              <Button type="button" variant="outline" onClick={addGroupStep}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Template
+                Link Group
               </Button>
-              <Button type="button" variant="outline" onClick={addTableStep}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Table
-              </Button>
-            </>
-          )}
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={addTemplateStep}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Template
+                </Button>
+                <Button type="button" variant="outline" onClick={addTableStep}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Table
+                </Button>
+              </>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={createTemplateAndEdit}
+            disabled={isCreatingTemplate}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {isCreatingTemplate ? "Creating..." : "Create New Template"}
+          </Button>
         </CardContent>
       </Card>
 

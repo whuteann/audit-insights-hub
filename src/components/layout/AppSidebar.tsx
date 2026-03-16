@@ -8,7 +8,7 @@ const navigation = [
   { name: "Templates", href: "/templates", icon: FileCode2 },
   { name: "Email Templates", href: "/email-templates", icon: Mail },
   { name: "Global Structure", href: "/assembly", icon: Network },
-  { name: "Companies", href: "/companies", icon: Building2 },
+  { name: "Screen Companies", href: "/companies", icon: Building2 },
   // { name: "Audit Trail", href: "/audit-trail", icon: ClipboardList },
 ];
 

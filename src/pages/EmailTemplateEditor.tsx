@@ -103,20 +103,8 @@ export default function EmailTemplateEditor() {
           <div className="space-y-2">
             <Label>Content</Label>
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => editor?.chain().focus().toggleBold().run()}>
-                <Bold className="h-4 w-4" />
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => editor?.chain().focus().toggleItalic().run()}>
-                <Italic className="h-4 w-4" />
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => editor?.chain().focus().toggleUnderline().run()}>
-                <UnderlineIcon className="h-4 w-4" />
-              </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => editor?.chain().focus().toggleBulletList().run()}>
                 <List className="h-4 w-4" />
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
-                <ListOrdered className="h-4 w-4" />
               </Button>
             </div>
             <EditorContent editor={editor} />

@@ -120,7 +120,7 @@ export default function CompanyListing() {
           <div className="flex items-center gap-3">
             <Button onClick={() => navigate("/companies/upload")}>
               <Upload className="w-4 h-4 mr-2" />
-              Perform Analysis
+              Screen Companies
             </Button>
             {/* <Button onClick={() => setIsScreeningModalOpen(true)}>
               <Filter className="w-4 h-4 mr-2" />

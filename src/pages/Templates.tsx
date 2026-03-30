@@ -35,6 +35,8 @@ export default function Templates() {
       .finally(() => setIsLoading(false));
   };
 
+  console.log("templates", templates);
+
   useEffect(() => {
     loadTemplates();
   }, [apiBase]);
@@ -103,8 +105,8 @@ export default function Templates() {
       </div>
 
       <div className="rounded-lg border bg-card">
-        <div className="grid grid-cols-[140px_1fr_120px_120px] gap-3 border-b px-4 py-3 text-xs uppercase text-muted-foreground">
-          <div>Section</div>
+        <div className="grid grid-cols-[minmax(0,1fr)_120px_120px] gap-3 border-b px-4 py-3 text-xs uppercase text-muted-foreground">
+          {/* <div>Section</div> */}
           <div>Title</div>
           <div>Updated</div>
           <div className="text-right">Actions</div>
@@ -116,9 +118,9 @@ export default function Templates() {
         ) : (
           <div className="divide-y">
             {sortedTemplates.map((tpl) => (
-              <div key={tpl.id} className="grid grid-cols-[140px_1fr_120px_120px] gap-3 px-4 py-3 text-sm">
-                <div className="font-medium">{tpl.section_id ?? "-"}</div>
-                <div>{tpl.title ?? tpl.name}</div>
+              <div key={tpl.id} className="grid grid-cols-[minmax(0,1fr)_120px_120px] gap-3 px-4 py-3 text-sm">
+                {/* <div className="font-medium">{tpl.section_id ?? "-"}</div> */}
+                <div>{tpl.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {tpl.updated_at ? new Date(tpl.updated_at).toLocaleDateString() : "—"}
                 </div>

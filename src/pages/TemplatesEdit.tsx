@@ -165,6 +165,7 @@ export default function TemplatesEdit() {
   const [template, setTemplate] = useState<TemplateItem | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [blocks, setBlocks] = useState<EditableBlock[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -309,6 +310,49 @@ export default function TemplatesEdit() {
     setIsEditingTitle(false);
   };
 
+  const saveTitle = async () => {
+    if (!template) return;
+    const nextName = draftName.trim();
+    if (!nextName) {
+      setError("Template title is required.");
+      return;
+    }
+    const currentName = (template.name ?? "").trim();
+    if (nextName === currentName) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    setError(null);
+    setIsSavingTitle(true);
+    try {
+      const res = await fetch(`${apiBase}/templates/${template.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      });
+      if (!res.ok) throw new Error("Failed to save template title");
+      const updated = await res.json();
+      setTemplate((prev) => (prev ? { ...prev, ...updated, name: updated.name ?? nextName } : prev));
+      setDraftName(updated.name ?? nextName);
+      setIsEditingTitle(false);
+      toast({
+        title: "Title saved",
+        description: "Template title updated.",
+      });
+    } catch (err) {
+      console.error("Failed to save template title", err);
+      setError("Failed to save template title.");
+      toast({
+        title: "Save failed",
+        description: "Unable to save template title.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
+
   const addBlock = () => {
     const nextShade = (() => {
       if (blocks.length === 0) return shadeForIndex(0);
@@ -369,7 +413,7 @@ export default function TemplatesEdit() {
               : "Loading template..."}
           </p>
         </div>
-        <Button variant="outline" onClick={() => navigate("/templates")}>
+        <Button variant="outline" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Templates
         </Button>
@@ -388,7 +432,25 @@ export default function TemplatesEdit() {
                     value={draftName}
                     onChange={(e) => setDraftName(e.target.value)}
                     className="max-w-2xl"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void saveTitle();
+                      }
+                    }}
                   />
+                  <Button
+                    size="sm"
+                    onClick={() => void saveTitle()}
+                    disabled={
+                      isSavingTitle ||
+                      !template ||
+                      !draftName.trim() ||
+                      draftName.trim() === (template?.name ?? "").trim()
+                    }
+                  >
+                    Save
+                  </Button>
                   <Button size="sm" variant="outline" onClick={cancelTitleEdit}>
                     Cancel
                   </Button>

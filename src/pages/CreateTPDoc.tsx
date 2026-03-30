@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -1133,16 +1133,18 @@ function FileUpload({
       ? value.name
       : value.original_name || value.filename || "Uploaded file"
     : null;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="flex items-center gap-2">
         <Input
+          ref={fileInputRef}
           type="file"
           accept={accept}
           onChange={(e) => onChange(e.target.files?.[0] ?? null)}
         />
-        <Button type="button" variant="outline" onClick={() => {}}>
+        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
           <Upload className="h-4 w-4 mr-2" />
           Select
         </Button>
@@ -1197,7 +1199,7 @@ function DynamicTable({
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                   {columns.map((c) => {
                     const showLabel = Boolean(c.label);
                     if (c.kind === "toggle" && !showLabel) {

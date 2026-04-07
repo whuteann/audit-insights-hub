@@ -854,6 +854,30 @@ export default function TPDocReview() {
     return String(value);
   };
 
+  const formatCellValue = (value: unknown): string => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "—";
+      return value.map((item) => formatCellValue(item)).join(", ");
+    }
+    if (typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      const nestedName = obj.name;
+      if (
+        typeof nestedName === "string" ||
+        typeof nestedName === "number" ||
+        typeof nestedName === "boolean"
+      ) {
+        return String(nestedName);
+      }
+      return JSON.stringify(obj);
+    }
+    return String(value);
+  };
+
   const handleImageUpload = (file: File) => {
     if (!editor) return;
     const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
@@ -1264,7 +1288,7 @@ export default function TPDocReview() {
                                                     View
                                                   </Button>
                                                 ) : (
-                                                  <span className="text-right">{val ?? "—"}</span>
+                                                  <span className="text-right">{formatCellValue(val)}</span>
                                                 )}
                                               </div>
                                             ))}

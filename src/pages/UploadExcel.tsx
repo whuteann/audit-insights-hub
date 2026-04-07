@@ -9,9 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import ProcessingPage from "@/pages/ProcessingPage";
+import { useAuth } from "@/context/AuthContext";
 
 export default function UploadExcel() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -65,6 +67,7 @@ export default function UploadExcel() {
       if (form.status_filter.trim()) body.append("status_filter", form.status_filter.trim());
       if (form.revenue_min.trim()) body.append("revenue_min", form.revenue_min.trim());
       if (form.revenue_max.trim()) body.append("revenue_max", form.revenue_max.trim());
+      if (user?.id) body.append("user_id", user.id);
 
       const res = await fetch(`${apiBase}/benchmark/analyze`, {
         method: "POST",

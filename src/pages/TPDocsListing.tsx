@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, FileEdit, Eye, Download } from "lucide-react";
+import { Plus, FileEdit, Eye, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StatusType } from "@/components/ui/StatusBadge";
+import { useAuth } from "@/context/AuthContext";
 
 type DocumentListItem = {
   id: string;
@@ -15,13 +16,18 @@ type DocumentListItem = {
   financial_year_end: string | null;
   status: string | null;
   updated_at: string;
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  owner_email?: string | null;
 };
 
 export default function TPDocsListing() {
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
   const [documents, setDocuments] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
   const statusCounts = useMemo(() => {
     const draftCount = documents.filter((doc) => doc.status === "draft").length;
@@ -71,7 +77,10 @@ export default function TPDocsListing() {
       const res = await fetch(`${apiBase}/drafts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "draft" }),
+        body: JSON.stringify({
+          status: "draft",
+          user_id: user?.id,
+        }),
       });
       if (!res.ok) throw new Error("Failed to create draft");
       const draft = await res.json();
@@ -82,63 +91,118 @@ export default function TPDocsListing() {
     }
   };
 
-  const columns = [
-    {
-      key: "companyName",
-      header: "Company Name",
-      render: (doc: DocumentListItem) => (
-        <span className="font-medium text-foreground">{doc.company_name ?? "—"}</span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (doc: DocumentListItem) => (
-        <StatusBadge status={(doc.status ?? "draft") as StatusType} />
-      ),
-    },
-    {
-      key: "lastUpdated",
-      header: "Last Updated",
-      render: (doc: DocumentListItem) => (
-        <span className="text-muted-foreground">{new Date(doc.updated_at).toLocaleDateString()}</span>
-      ),
-    },
-    {
-      key: "actions",
-      header: "Actions",
-      render: (doc: DocumentListItem) => (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleContinueEditing(doc)}
-          >
-            <FileEdit className="w-4 h-4 mr-1" />
-            {doc.status === "draft" ? "Continue" : "Edit"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleReview(doc)}
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            Review
-          </Button>
-          {doc.status === "generated" && (
+  const handleDelete = async (doc: DocumentListItem) => {
+    const confirmed = window.confirm(
+      `Delete TP document "${doc.company_name ?? doc.id}"? This can be restored only by DB update.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingDocumentId(doc.id);
+    try {
+      const response = await fetch(`${apiBase}/documents/${doc.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => null);
+        const detail =
+          errPayload && typeof errPayload.detail === "string"
+            ? errPayload.detail
+            : "Could not delete document";
+        throw new Error(detail);
+      }
+      setDocuments((prev) => prev.filter((item) => item.id !== doc.id));
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Could not delete document");
+    } finally {
+      setDeletingDocumentId((current) => (current === doc.id ? null : current));
+    }
+  };
+
+  const columns = useMemo(() => {
+    const baseColumns = [
+      {
+        key: "companyName",
+        header: "Company Name",
+        render: (doc: DocumentListItem) => (
+          <span className="font-medium text-foreground">{doc.company_name ?? "—"}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (doc: DocumentListItem) => (
+          <StatusBadge status={(doc.status ?? "draft") as StatusType} />
+        ),
+      },
+      {
+        key: "lastUpdated",
+        header: "Last Updated",
+        render: (doc: DocumentListItem) => (
+          <span className="text-muted-foreground">{new Date(doc.updated_at).toLocaleDateString()}</span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (doc: DocumentListItem) => (
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleDownload(doc)}
+              onClick={() => handleContinueEditing(doc)}
             >
-              <Download className="w-4 h-4 mr-1" />
-              PDF
+              <FileEdit className="w-4 h-4 mr-1" />
+              {doc.status === "draft" ? "Continue" : "Edit"}
             </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleReview(doc)}
+            >
+              <Eye className="w-4 h-4 mr-1" />
+              Review
+            </Button>
+            {doc.status === "generated" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDownload(doc)}
+              >
+                <Download className="w-4 h-4 mr-1" />
+                PDF
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDelete(doc)}
+              disabled={deletingDocumentId === doc.id}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete
+            </Button>
+          </div>
+        ),
+      },
+    ];
+
+    if (!isAdmin) {
+      return baseColumns;
+    }
+
+    return [
+      baseColumns[0],
+      {
+        key: "owner",
+        header: "Owner",
+        render: (doc: DocumentListItem) => (
+          <span className="text-muted-foreground">
+            {doc.owner_name || doc.owner_email || "Unassigned"}
+          </span>
+        ),
+      },
+      ...baseColumns.slice(1),
+    ];
+  }, [deletingDocumentId, isAdmin]);
 
   return (
     <div className="page-container">

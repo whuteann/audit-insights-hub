@@ -1,19 +1,21 @@
-import { FileText, Building2, ClipboardList, LayoutDashboard, FileCode2, Network, Mail } from "lucide-react";
+import { Building2, FileCode2, FileText, LogOut, Mail, Network, Users } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
-const navigation = [
-  // { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "TP Docs", href: "/tp-docs", icon: FileText },
-  { name: "Templates", href: "/templates", icon: FileCode2 },
-  { name: "Email Templates", href: "/email-templates", icon: Mail },
-  { name: "Global Structure", href: "/assembly", icon: Network },
-  { name: "Screen Companies", href: "/companies", icon: Building2 },
-  // { name: "Audit Trail", href: "/audit-trail", icon: ClipboardList },
-];
-
 export function AppSidebar() {
+  const { user, isAdmin, logout } = useAuth();
   const location = useLocation();
+  const navigation = [
+    { name: "TP Docs", href: "/tp-docs", icon: FileText, adminOnly: false },
+    { name: "Templates", href: "/templates", icon: FileCode2, adminOnly: true },
+    { name: "Email Templates", href: "/email-templates", icon: Mail, adminOnly: true },
+    { name: "Global Structure", href: "/assembly", icon: Network, adminOnly: true },
+    { name: "User List", href: "/users", icon: Users, adminOnly: true },
+    { name: "Screen Companies", href: "/companies", icon: Building2, adminOnly: false },
+  ];
 
   return (
     <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -32,6 +34,9 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navigation.map((item) => {
+          if (item.adminOnly && !isAdmin) {
+            return null;
+          }
           const isActive = location.pathname.startsWith(item.href);
           return (
             <NavLink
@@ -52,20 +57,28 @@ export function AppSidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-foreground text-sm font-medium">
-            JD
+            {(user?.name || "U")
+              .split(" ")
+              .map((part) => part[0]?.toUpperCase() || "")
+              .join("")
+              .slice(0, 2)}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-sidebar-foreground truncate">
-              John Doe
+              {user?.name ?? "User"}
             </p>
             <p className="text-xs text-sidebar-foreground/60 truncate">
-              john@company.com
+              {user?.email ?? ""}
             </p>
           </div>
         </div>
+        <Button variant="outline" className="w-full justify-start gap-2" onClick={logout}>
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </Button>
       </div>
     </aside>
   );

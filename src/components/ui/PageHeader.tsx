@@ -1,7 +1,8 @@
 import { ReactNode } from "react";
 
 interface PageHeaderProps {
-  title: string;
+  /** Plain text in almost every case; a node when the title is interactive (e.g. inline rename). */
+  title: ReactNode;
   description?: string;
   actions?: ReactNode;
 }

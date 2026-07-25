@@ -1,50 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Check, Download, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/DataTable";
 import { toast } from "@/components/ui/use-toast";
+import {
+  updateAnalysis,
+  type AnalysisCompanyResult as AnalysisCompanyRow,
+  type AnalysisDetail as AnalysisRecord,
+} from "@/pages/CompanyListing";
 
-type AnalysisCompanyRow = {
-  id: string;
-  row_number: number;
-  similarity_score: number | null;
-  verdict: string;
-  user_verdict: "ACCEPTED" | "POTENTIAL" | "REJECTED" | null;
-  reason: string;
-  company: {
-    id: string;
-    name: string;
-    country: string | null;
-    website: string | null;
-  };
-};
-
-type AnalysisDetail = {
-  id: string;
-  company_name: string;
-  target_description: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  total_companies: number;
-  accepted_count: number;
-  potential_count: number;
-  rejected_count: number;
-  filter_keyword: string | null;
-  filter_region: string | null;
-  filter_industry: string | null;
-  filter_status: string | null;
-  filter_revenue_min: string | null;
-  filter_revenue_max: string | null;
-  company_results: AnalysisCompanyRow[];
-};
-
-const normalizeAnalysis = (analysis: AnalysisDetail): AnalysisDetail => ({
+const normalizeAnalysis = (analysis: AnalysisRecord): AnalysisRecord => ({
   ...analysis,
   company_results: [...(analysis.company_results || [])].sort((a, b) => a.row_number - b.row_number),
 });
@@ -53,11 +24,14 @@ export default function AnalysisDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9000";
-  const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userVerdictFilter, setUserVerdictFilter] = useState("ALL");
   const [computedVerdictFilter, setComputedVerdictFilter] = useState("ALL");
   const [updatingRowId, setUpdatingRowId] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -137,7 +111,7 @@ export default function AnalysisDetail() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to update verdict");
-      const updatedAnalysis = (await res.json()) as AnalysisDetail;
+      const updatedAnalysis = (await res.json()) as AnalysisRecord;
       setAnalysis(normalizeAnalysis(updatedAnalysis));
     } catch (error) {
       console.error(error);
@@ -148,6 +122,51 @@ export default function AnalysisDetail() {
       });
     } finally {
       setUpdatingRowId(null);
+    }
+  };
+
+  const startEditingName = () => {
+    setNameDraft(analysis?.company_name ?? "");
+    setIsEditingName(true);
+  };
+
+  const cancelEditingName = () => {
+    setIsEditingName(false);
+    setNameDraft("");
+  };
+
+  const handleSaveName = async () => {
+    if (!id || !analysis) return;
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      toast({
+        title: "Name required",
+        description: "Company name cannot be empty.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (trimmed === analysis.company_name) {
+      cancelEditingName();
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      const updated = await updateAnalysis(id, { company_name: trimmed }, { apiBase });
+      setAnalysis(normalizeAnalysis(updated));
+      setIsEditingName(false);
+      setNameDraft("");
+      toast({ title: "Analysis renamed", description: `Now "${updated.company_name}".` });
+    } catch (error) {
+      console.error("Failed to rename analysis", error);
+      toast({
+        title: "Rename failed",
+        description: error instanceof Error ? error.message : "Unable to update company name.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingName(false);
     }
   };
 
@@ -216,7 +235,55 @@ export default function AnalysisDetail() {
   return (
     <div className="page-container space-y-6">
       <PageHeader
-        title={analysis ? `Analysis: ${analysis.company_name}` : "Analysis Detail"}
+        title={
+          !analysis ? (
+            "Analysis Detail"
+          ) : isEditingName ? (
+            <span className="flex items-center gap-2">
+              <Input
+                autoFocus
+                value={nameDraft}
+                disabled={isSavingName}
+                aria-label="Subject company name"
+                className="h-10 w-[22rem] max-w-full text-2xl font-semibold"
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleSaveName();
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelEditingName();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={() => void handleSaveName()}
+                disabled={isSavingName || !nameDraft.trim()}
+              >
+                <Check className="w-4 h-4 mr-2" />
+                {isSavingName ? "Saving..." : "Save"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={cancelEditingName} disabled={isSavingName}>
+                <X className="w-4 h-4" />
+                <span className="sr-only">Cancel rename</span>
+              </Button>
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              {`Analysis: ${analysis.company_name}`}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={startEditingName}
+                aria-label="Rename subject company"
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+            </span>
+          )
+        }
         description="Benchmark analysis details and candidate verdicts"
         actions={
           <div className="flex items-center gap-2">
